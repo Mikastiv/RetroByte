@@ -4,6 +4,12 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const sdl2_dep = b.dependency("SDL2", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const sdl2 = sdl2_dep.artifact("SDL2");
+
     const exe = b.addExecutable(.{
         .name = "RetroByte",
         .root_source_file = .{ .path = "src/main.zig" },
@@ -11,6 +17,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    exe.linkLibrary(sdl2);
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);
