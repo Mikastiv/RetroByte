@@ -25,6 +25,21 @@ l: u8,
 sp: u16,
 pc: u16,
 
+pub fn init() Self {
+    return .{
+        .a = 0,
+        .f = .{ .raw = 0 },
+        .b = 0,
+        .c = 0,
+        .d = 0,
+        .e = 0,
+        .h = 0,
+        .l = 0,
+        .sp = 0,
+        .pc = 0,
+    };
+}
+
 pub fn read16(self: *Self, comptime reg: Regs16) u16 {
     return switch (reg) {
         .af => @as(u16, self.a) << 8 | @as(u16, self.f.raw),

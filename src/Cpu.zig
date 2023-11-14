@@ -1,9 +1,11 @@
 const std = @import("std");
 const Self = @This();
 const Registers = @import("cpu/Registers.zig");
+const Bus = @import("Bus.zig");
 const expect = std.testing.expect;
 
 regs: Registers,
+bus: Bus,
 
 test "registers" {
     var regs: Registers = undefined;
@@ -27,4 +29,17 @@ test "flags" {
     try expect(regs.f.raw == 0x90);
     regs.f.bits.n = 1;
     try expect(regs.f.raw == 0xD0);
+}
+
+test "bus" {
+    const TestBus = @import("TestBus.zig");
+    var test_bus = TestBus{};
+
+    var cpu = Self{
+        .regs = Registers.init(),
+        .bus = test_bus.bus(),
+    };
+
+    test_bus.ram[0xFF34] = 0xBC;
+    try expect(cpu.bus.read(0xFF34) == 0xBC);
 }
