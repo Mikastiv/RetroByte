@@ -124,3 +124,7 @@ fn run(sdl: SDLContext) !void {
     }
     return 0;
 }
+
+test {
+    _ = @import("Cpu.zig");
+}
