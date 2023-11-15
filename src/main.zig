@@ -19,6 +19,7 @@ const Gameboy = @import("Gameboy.zig");
 
 var running = true;
 var frame = Gameboy.Frame{};
+var rng = std.rand.DefaultPrng.init(0);
 
 fn runLoop(sdl: *SDLContext) !void {
     var event: c.SDL_Event = undefined;
@@ -42,7 +43,7 @@ fn runLoop(sdl: *SDLContext) !void {
     }
 
     for (&frame.pixels) |*p| {
-        p.* = 0x00;
+        p.* = rng.random().int(u8);
     }
 
     try sdl.clearFramebuffer();

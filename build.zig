@@ -1,4 +1,10 @@
 const std = @import("std");
+const sep_str = std.fs.path.sep_str;
+
+const emccOutputDir = "zig-out/wasm";
+const emccOutputFile = "index.html";
+const emccFullOutputFile = emccOutputDir ++ "/" ++ emccOutputFile;
+const emccIncludeDir = "upstream/emscripten/cache/sysroot/include";
 
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
@@ -8,20 +14,34 @@ pub fn build(b: *std.Build) !void {
         .emscripten => {
             const emsdk = try std.process.getEnvVarOwned(b.allocator, "EMSDK");
             defer b.allocator.free(emsdk);
-            const emsdk_inc = try std.mem.join(b.allocator, "/", &.{ emsdk, "upstream/emscripten/cache/sysroot/include" });
+            const emsdk_inc = try std.mem.join(b.allocator, "/", &.{ emsdk, emccIncludeDir });
             defer b.allocator.free(emsdk_inc);
 
             const lib = b.addStaticLibrary(.{
                 .name = "retrobyte",
                 .root_source_file = .{ .path = "src/main.zig" },
+                .link_libc = true,
                 .target = target,
                 .optimize = optimize,
             });
 
-            lib.linkLibC();
             lib.addIncludePath(.{ .cwd_relative = emsdk_inc });
             lib.addIncludePath(.{ .path = "include" });
-            b.installArtifact(lib);
+
+            std.fs.cwd().makePath(emccOutputDir) catch |err| {
+                if (err != error.PathAlreadyExists) return err;
+            };
+
+            const emcc = b.addSystemCommand(&.{ "emcc", "-s", "USE_SDL=2", "-o", emccFullOutputFile });
+            emcc.addFileArg(lib.getEmittedBin());
+            emcc.step.dependOn(&lib.step);
+
+            b.getInstallStep().dependOn(&emcc.step);
+
+            const emrun = b.addSystemCommand(&.{ "emrun", emccFullOutputFile });
+            emrun.step.dependOn(&emcc.step);
+            const run_step = b.step("run", "Run the app");
+            run_step.dependOn(&emrun.step);
         },
         else => {
             const exe = b.addExecutable(.{
