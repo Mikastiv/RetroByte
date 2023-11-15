@@ -2,6 +2,7 @@ const std = @import("std");
 const c = @import("c.zig");
 const builtin = @import("builtin");
 const SDLContext = @import("SDLContext.zig");
+const Gameboy = @import("Gameboy.zig");
 
 // fn getRom(allocator: std.mem.Allocator) ![]const u8 {
 //     const stderr = std.io.getStdErr().writer();
@@ -17,6 +18,7 @@ const SDLContext = @import("SDLContext.zig");
 // }
 
 var running = true;
+var frame = Gameboy.Frame{};
 
 fn runLoop(sdl: *SDLContext) !void {
     var event: c.SDL_Event = undefined;
@@ -39,7 +41,12 @@ fn runLoop(sdl: *SDLContext) !void {
         }
     }
 
+    for (&frame.pixels) |*p| {
+        p.* = 0x00;
+    }
+
     try sdl.clearFramebuffer();
+    try sdl.copyToBackbuffer(&frame);
     try sdl.renderCopy();
     sdl.renderPresent();
 }
@@ -52,11 +59,9 @@ fn emscriptenLoopWrapper(arg: ?*anyopaque) callconv(.C) void {
 }
 
 pub fn main() !void {
+    var sdl = try SDLContext.init("RetroByte", 800, 600);
+
     if (builtin.os.tag == .emscripten) {
-        var sdl = SDLContext.init("RetroByte", 800, 600) catch |err| {
-            std.log.err("{s}", .{@errorName(err)});
-            return;
-        };
         // defer sdl.deinit();
 
         sdl.setDrawColor(0, 0, 0) catch return;
@@ -68,7 +73,6 @@ pub fn main() !void {
         const allocator = arena.allocator();
         _ = allocator;
 
-        var sdl = try SDLContext.init("RetroByte", 800, 600);
         defer {
             if (builtin.os.tag != .windows) sdl.deinit(); // No deinit on fucking windows because it's too slow. Later looser.
         }

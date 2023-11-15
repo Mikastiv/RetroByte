@@ -85,14 +85,21 @@ pub fn clearFramebuffer(self: Self) SDLError!void {
     }
 }
 
-pub fn lockTexture(self: Self) SDLError!void {
-    if (c.SDL_LockTexture(self.backbuffer) < 0) {
-        printSDLError(@src().fn_name);
+pub fn copyToBackbuffer(self: Self, frame: *const Gameboy.Frame) !void {
+    var pixel_ptr: ?*anyopaque = undefined;
+    var pitch: c_int = undefined;
+    if (c.SDL_LockTexture(self.backbuffer, null, &pixel_ptr, &pitch) < 0) {
+        errdefer printSDLError(@src().fn_name);
         return error.SDLTextureLockFailed;
     }
-}
 
-pub fn unlockTexture(self: Self) void {
+    const ptr: [*]u8 = @ptrCast(pixel_ptr);
+    const pixels = ptr[0..Gameboy.Frame.size];
+
+    for (0..Gameboy.Frame.size) |i| {
+        pixels[i] = frame.pixels[i];
+    }
+
     c.SDL_UnlockTexture(self.backbuffer);
 }
 
