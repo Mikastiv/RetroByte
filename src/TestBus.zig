@@ -10,6 +10,7 @@ pub fn bus(self: *Self) Bus {
     return .{
         .ctx = self,
         .vtable = &.{
+            .peek = peek,
             .read = read,
             .write = write,
             .tick = tick,
@@ -17,9 +18,13 @@ pub fn bus(self: *Self) Bus {
     };
 }
 
-fn read(ctx: *anyopaque, addr: u16) u8 {
+fn peek(ctx: *anyopaque, addr: u16) u8 {
     const self: *Self = @ptrCast(@alignCast(ctx));
     return self.ram[addr];
+}
+
+fn read(ctx: *anyopaque, addr: u16) u8 {
+    return peek(ctx, addr);
 }
 
 fn write(ctx: *anyopaque, addr: u16, data: u8) void {

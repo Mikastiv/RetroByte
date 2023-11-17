@@ -4,10 +4,15 @@ ctx: *anyopaque,
 vtable: *const VTable,
 
 pub const VTable = struct {
+    peek: *const fn (ctx: *anyopaque, addr: u16) u8,
     read: *const fn (ctx: *anyopaque, addr: u16) u8,
     write: *const fn (ctx: *anyopaque, addr: u16, data: u8) void,
     tick: *const fn (ctx: *anyopaque) void,
 };
+
+pub fn peek(self: Bus, addr: u16) u8 {
+    return self.vtable.peek(addr);
+}
 
 pub fn read(self: Bus, addr: u16) u8 {
     return self.vtable.read(self.ctx, addr);
