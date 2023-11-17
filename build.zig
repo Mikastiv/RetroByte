@@ -1,10 +1,9 @@
 const std = @import("std");
 const sep_str = std.fs.path.sep_str;
 
-const emccOutputDir = "zig-out/wasm";
-const emccOutputFile = "index.html";
-const emccFullOutputFile = emccOutputDir ++ "/" ++ emccOutputFile;
-const emccIncludeDir = "upstream/emscripten/cache/sysroot/include";
+const emcc_output_dir = "wasm";
+const emcc_output_file = "index.html";
+const emcc_include_dir = "upstream/emscripten/cache/sysroot/include";
 
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
@@ -12,10 +11,8 @@ pub fn build(b: *std.Build) !void {
 
     switch (target.getOsTag()) {
         .emscripten => {
-            const emsdk = try std.process.getEnvVarOwned(b.allocator, "EMSDK");
-            defer b.allocator.free(emsdk);
-            const emsdk_inc = try std.mem.join(b.allocator, "/", &.{ emsdk, emccIncludeDir });
-            defer b.allocator.free(emsdk_inc);
+            const emsdk = b.env_map.get("EMSDK") orelse return error.EMSDKEnvNotSet;
+            const emsdk_inc = b.pathJoin(&.{ emsdk, emcc_include_dir });
 
             const lib = b.addStaticLibrary(.{
                 .name = "retrobyte",
@@ -28,17 +25,21 @@ pub fn build(b: *std.Build) !void {
             lib.addIncludePath(.{ .cwd_relative = emsdk_inc });
             lib.addIncludePath(.{ .path = "include" });
 
-            std.fs.cwd().makePath(emccOutputDir) catch |err| {
+            const wf = b.addWriteFiles();
+            const lib_bin = wf.addCopyFile(lib.getEmittedBin(), lib.out_lib_filename);
+
+            const wasm_dir = b.getInstallPath(.{ .custom = emcc_output_dir }, "");
+            std.fs.cwd().makePath(wasm_dir) catch |err| {
                 if (err != error.PathAlreadyExists) return err;
             };
 
-            const emcc = b.addSystemCommand(&.{ "emcc", "-s", "USE_SDL=2", "-o", emccFullOutputFile });
-            emcc.addFileArg(lib.getEmittedBin());
-            emcc.step.dependOn(&lib.step);
+            const emcc_output = b.pathJoin(&.{ wasm_dir, emcc_output_file });
+            const emcc = b.addSystemCommand(&.{ "emcc", "-s", "USE_SDL=2", "-o", emcc_output });
+            emcc.addFileArg(lib_bin);
 
             b.getInstallStep().dependOn(&emcc.step);
 
-            const emrun = b.addSystemCommand(&.{ "emrun", emccFullOutputFile });
+            const emrun = b.addSystemCommand(&.{ "emrun", emcc_output });
             emrun.step.dependOn(&emcc.step);
             const run_step = b.step("run", "Run the app");
             run_step.dependOn(&emrun.step);
