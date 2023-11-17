@@ -1,18 +1,15 @@
 const std = @import("std");
 const sep_str = std.fs.path.sep_str;
 
-const emcc_output_dir = "wasm";
-const emcc_output_file = "index.html";
-const emcc_include_dir = "upstream/emscripten/cache/sysroot/include";
-
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
     switch (target.getOsTag()) {
         .emscripten => {
+            // get emscripten sdk path
             const emsdk = b.env_map.get("EMSDK") orelse return error.EMSDKEnvNotSet;
-            const emsdk_inc = b.pathJoin(&.{ emsdk, emcc_include_dir });
+            const emsdk_inc = b.pathJoin(&.{ emsdk, "upstream/emscripten/cache/sysroot/include" });
 
             const lib = b.addStaticLibrary(.{
                 .name = "retrobyte",
@@ -25,20 +22,24 @@ pub fn build(b: *std.Build) !void {
             lib.addIncludePath(.{ .cwd_relative = emsdk_inc });
             lib.addIncludePath(.{ .path = "include" });
 
+            // create cached static lib to link with emcc
             const wf = b.addWriteFiles();
             const lib_bin = wf.addCopyFile(lib.getEmittedBin(), lib.out_lib_filename);
 
-            const wasm_dir = b.getInstallPath(.{ .custom = emcc_output_dir }, "");
+            // create wasm output folder inside .prefix folder
+            const wasm_dir = b.getInstallPath(.{ .custom = "wasm" }, "");
             std.fs.cwd().makePath(wasm_dir) catch |err| {
                 if (err != error.PathAlreadyExists) return err;
             };
 
-            const emcc_output = b.pathJoin(&.{ wasm_dir, emcc_output_file });
+            // emcc link command
+            const emcc_output = b.pathJoin(&.{ wasm_dir, "index.html" });
             const emcc = b.addSystemCommand(&.{ "emcc", "-s", "USE_SDL=2", "-o", emcc_output });
             emcc.addFileArg(lib_bin);
 
             b.getInstallStep().dependOn(&emcc.step);
 
+            // emrun as the run step
             const emrun = b.addSystemCommand(&.{ "emrun", emcc_output });
             emrun.step.dependOn(&emcc.step);
             const run_step = b.step("run", "Run the app");
