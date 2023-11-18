@@ -1,11 +1,22 @@
 const std = @import("std");
 const Self = @This();
 const Registers = @import("cpu/Registers.zig");
-const Bus = @import("Bus.zig");
+const Bus = @import("bus.zig").Bus;
 const expect = std.testing.expect;
 
 regs: Registers,
-bus: Bus,
+bus: *Bus,
+
+pub fn init(bus: *Bus) Self {
+    return .{
+        .bus = bus,
+        .regs = Registers.init(),
+    };
+}
+
+pub fn execute(self: *Self) void {
+    _ = self;
+}
 
 test "registers" {
     var regs: Registers = undefined;

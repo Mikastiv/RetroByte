@@ -2,9 +2,9 @@ const Self = @This();
 const std = @import("std");
 const Gameboy = @import("Gameboy.zig");
 
-const ram_size = 0x10000;
+const ram_size = 8 * 1024;
 
-ram: [ram_size]u8 = std.mem.zeroes([ram_size]u8),
+ram: [ram_size]u8 = undefined,
 
 pub fn init(self: *Self, gameboy: *const Gameboy) void {
     _ = gameboy;
