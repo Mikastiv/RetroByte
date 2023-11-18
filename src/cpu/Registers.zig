@@ -27,16 +27,16 @@ pc: u16,
 
 pub fn init() Self {
     return .{
-        .a = 0,
+        .a = 0x01,
         .f = .{ .raw = 0 },
-        .b = 0,
-        .c = 0,
-        .d = 0,
-        .e = 0,
-        .h = 0,
-        .l = 0,
-        .sp = 0,
-        .pc = 0,
+        .b = 0xFF,
+        .c = 0x13,
+        .d = 0x00,
+        .e = 0xC1,
+        .h = 0x84,
+        .l = 0x03,
+        .sp = 0xFFFE,
+        .pc = 0x0100,
     };
 }
 
@@ -47,6 +47,19 @@ pub fn read16(self: *Self, comptime reg: Regs16) u16 {
         .de => @as(u16, self.d) << 8 | @as(u16, self.e),
         .hl => @as(u16, self.h) << 8 | @as(u16, self.l),
         .sp => self.sp,
+    };
+}
+
+pub fn read8(self: *Self, comptime reg: Regs8) u8 {
+    return switch (reg) {
+        .a => self.a,
+        .f => self.f.raw,
+        .b => self.b,
+        .c => self.c,
+        .d => self.d,
+        .e => self.e,
+        .h => self.h,
+        .l => self.l,
     };
 }
 
@@ -70,4 +83,17 @@ pub fn write16(self: *Self, comptime reg: Regs16, value: u16) void {
         },
         .sp => self.sp = value,
     }
+}
+
+pub fn write8(self: *Self, comptime reg: Regs8, value: u8) void {
+    return switch (reg) {
+        .a => self.a = value,
+        .f => self.f.raw = value,
+        .b => self.b = value,
+        .c => self.c = value,
+        .d => self.d = value,
+        .e => self.e = value,
+        .h => self.h = value,
+        .l => self.l = value,
+    };
 }
