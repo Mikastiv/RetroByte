@@ -1,7 +1,7 @@
 const Self = @This();
 
-pub const Regs8 = enum { a, f, b, c, d, e, h, l };
-pub const Regs16 = enum { af, bc, de, hl, sp };
+pub const Reg8 = enum { a, f, b, c, d, e, h, l };
+pub const Reg16 = enum { af, bc, de, hl, sp };
 
 pub const Flags = packed union {
     bits: packed struct {
@@ -40,7 +40,7 @@ pub fn init() Self {
     };
 }
 
-pub fn read16(self: *Self, comptime reg: Regs16) u16 {
+pub fn read16(self: *Self, comptime reg: Reg16) u16 {
     return switch (reg) {
         .af => @as(u16, self.a) << 8 | @as(u16, self.f.raw),
         .bc => @as(u16, self.b) << 8 | @as(u16, self.c),
@@ -50,7 +50,7 @@ pub fn read16(self: *Self, comptime reg: Regs16) u16 {
     };
 }
 
-pub fn read8(self: *Self, comptime reg: Regs8) u8 {
+pub fn read8(self: *Self, comptime reg: Reg8) u8 {
     return switch (reg) {
         .a => self.a,
         .f => self.f.raw,
@@ -63,7 +63,7 @@ pub fn read8(self: *Self, comptime reg: Regs8) u8 {
     };
 }
 
-pub fn write16(self: *Self, comptime reg: Regs16, value: u16) void {
+pub fn write16(self: *Self, comptime reg: Reg16, value: u16) void {
     switch (reg) {
         .af => {
             self.a = @intCast(value >> 8);
@@ -85,7 +85,7 @@ pub fn write16(self: *Self, comptime reg: Regs16, value: u16) void {
     }
 }
 
-pub fn write8(self: *Self, comptime reg: Regs8, value: u8) void {
+pub fn write8(self: *Self, comptime reg: Reg8, value: u8) void {
     return switch (reg) {
         .a => self.a = value,
         .f => self.f.raw = value,
