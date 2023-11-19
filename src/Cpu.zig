@@ -18,8 +18,7 @@ pub fn init(bus: *Bus) Self {
 }
 
 pub fn execute(self: *Self) void {
-    const opcode: u8 = self.bus.read(self.regs.pc);
-    self.regs.pc +%= 1;
+    const opcode: u8 = self.read8();
     switch (opcode) {
         0x00 => self.nop(),
         0x01 => self.ld16(.bc),
