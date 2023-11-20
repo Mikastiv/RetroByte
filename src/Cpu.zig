@@ -23,24 +23,48 @@ pub fn execute(self: *Self) void {
         0x00 => self.nop(),
         0x01 => self.ld16(.bc),
         0x02 => self.ld(.{ .address = .bc }, .{ .reg8 = .a }),
+        0x03 => self.inc16(.bc),
+        0x04 => self.inc(.{ .reg8 = .b }, .{ .reg8 = .b }),
+        0x05 => self.dec(.{ .reg8 = .b }, .{ .reg8 = .b }),
         0x06 => self.ld(.{ .reg8 = .b }, .{ .address = .imm }),
         0x08 => self.ldAbsSp(),
         0x0A => self.ld(.{ .reg8 = .a }, .{ .address = .bc }),
+        0x0B => self.dec16(.bc),
+        0x0C => self.inc(.{ .reg8 = .c }, .{ .reg8 = .c }),
+        0x0D => self.dec(.{ .reg8 = .c }, .{ .reg8 = .c }),
         0x0E => self.ld(.{ .reg8 = .c }, .{ .address = .imm }),
         0x11 => self.ld16(.de),
         0x12 => self.ld(.{ .address = .de }, .{ .reg8 = .a }),
+        0x13 => self.inc16(.de),
+        0x14 => self.inc(.{ .reg8 = .d }, .{ .reg8 = .d }),
+        0x15 => self.dec(.{ .reg8 = .d }, .{ .reg8 = .d }),
         0x1A => self.ld(.{ .reg8 = .a }, .{ .address = .de }),
+        0x1B => self.dec16(.de),
+        0x1C => self.inc(.{ .reg8 = .e }, .{ .reg8 = .e }),
+        0x1D => self.dec(.{ .reg8 = .e }, .{ .reg8 = .e }),
         0x1E => self.ld(.{ .reg8 = .e }, .{ .address = .imm }),
         0x16 => self.ld(.{ .reg8 = .d }, .{ .address = .imm }),
         0x21 => self.ld16(.hl),
         0x22 => self.ld(.{ .address = .hli }, .{ .reg8 = .a }),
+        0x23 => self.inc16(.hl),
+        0x24 => self.inc(.{ .reg8 = .h }, .{ .reg8 = .h }),
+        0x25 => self.dec(.{ .reg8 = .h }, .{ .reg8 = .h }),
         0x26 => self.ld(.{ .reg8 = .h }, .{ .address = .imm }),
         0x2A => self.ld(.{ .reg8 = .a }, .{ .address = .hli }),
+        0x2B => self.dec16(.hl),
+        0x2C => self.inc(.{ .reg8 = .l }, .{ .reg8 = .l }),
+        0x2D => self.dec(.{ .reg8 = .l }, .{ .reg8 = .l }),
         0x2E => self.ld(.{ .reg8 = .l }, .{ .address = .imm }),
         0x31 => self.ld16(.sp),
         0x32 => self.ld(.{ .address = .hld }, .{ .reg8 = .a }),
+        0x33 => self.inc16(.sp),
+        0x34 => self.inc(.{ .address = .hl }, .{ .address = .hl }),
+        0x35 => self.dec(.{ .address = .hl }, .{ .address = .hl }),
         0x36 => self.ld(.{ .address = .hl }, .{ .address = .imm }),
         0x3A => self.ld(.{ .reg8 = .a }, .{ .address = .hld }),
+        0x3B => self.dec16(.sp),
+        0x3C => self.inc(.{ .reg8 = .a }, .{ .reg8 = .a }),
+        0x3D => self.dec(.{ .reg8 = .a }, .{ .reg8 = .a }),
         0x3E => self.ld(.{ .reg8 = .a }, .{ .address = .imm }),
         0x40 => self.ld(.{ .reg8 = .b }, .{ .reg8 = .b }),
         0x41 => self.ld(.{ .reg8 = .b }, .{ .reg8 = .c }),
@@ -137,8 +161,8 @@ fn ld(self: *Self, comptime dst: rw.Dst, comptime src: rw.Src) void {
 }
 
 fn ld16(self: *Self, comptime reg: Reg16) void {
-    const d16 = self.read16();
-    self.regs.write16(reg, d16);
+    const value = self.read16();
+    self.regs.write16(reg, value);
 }
 
 fn ldAbsSp(self: *Self) void {
@@ -165,6 +189,28 @@ fn ldHlSpImm(self: *Self) void {
 
 fn ldSpHl(self: *Self) void {
     self.regs.sp = self.regs.read16(.hl);
+    self.bus.tick();
+}
+
+fn inc(self: *Self, comptime dst: rw.Dst, comptime src: rw.Src) void {
+    const value = src.read(self);
+    dst.write(self, value +% 1);
+}
+
+fn inc16(self: *Self, comptime reg: Reg16) void {
+    const value = self.regs.read16(reg);
+    self.regs.write16(reg, value +% 1);
+    self.bus.tick();
+}
+
+fn dec(self: *Self, comptime dst: rw.Dst, comptime src: rw.Src) void {
+    const value = src.read(self);
+    dst.write(self, value -% 1);
+}
+
+fn dec16(self: *Self, comptime reg: Reg16) void {
+    const value = self.regs.read16(reg);
+    self.regs.write16(reg, value -% 1);
     self.bus.tick();
 }
 
