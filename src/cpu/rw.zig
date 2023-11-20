@@ -8,9 +8,9 @@ pub const Address = enum {
     hli,
     hld,
     imm,
+    imm_word,
     zero_page,
     zero_page_c,
-    absolute,
 
     fn get(cpu: *Cpu, comptime loc: Address) u16 {
         return switch (loc) {
@@ -28,6 +28,7 @@ pub const Address = enum {
                 break :blk addr;
             },
             .imm => cpu.read8(),
+            .imm_word => cpu.read16(),
             .zero_page => blk: {
                 const lo: u16 = cpu.read8();
                 const addr = 0xFF00 | lo;
@@ -38,7 +39,6 @@ pub const Address = enum {
                 const addr = 0xFF00 | lo;
                 break :blk addr;
             },
-            .absolute => cpu.read16(),
         };
     }
 };
