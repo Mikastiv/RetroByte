@@ -136,7 +136,7 @@ pub fn execute(self: *Self) void {
         0xF2 => self.ld(.{ .reg8 = .a }, .{ .address = .zero_page_c }),
         0xF8 => self.ldHlSpImm(),
         0xF9 => self.ldSpHl(),
-        0xFA => self.ld(.{ .reg8 = .a }, .{ .address = .absolute }),
+        0xFA => self.ld(.{ .reg8 = .a }, .{ .address = .imm_word }),
         else => {},
     }
 }
