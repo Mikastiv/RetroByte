@@ -1,8 +1,8 @@
 const std = @import("std");
 const expect = std.testing.expect;
 
-pub const Reg8 = enum { f, a, c, b, e, d, l, h };
-pub const Reg16 = enum { af, bc, de, hl, sp, pc };
+pub const Reg8 = enum(u8) { f = 0, a = 1, c = 2, b = 3, e = 4, d = 5, l = 6, h = 7 };
+pub const Reg16 = enum(u8) { af = 0, bc = 1, de = 2, hl = 3, sp = 4, pc = 5 };
 
 pub fn RegisterArray(comptime Reg: type, comptime T: type) type {
     return extern struct {
