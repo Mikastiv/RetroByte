@@ -2,7 +2,7 @@ const std = @import("std");
 const Self = @This();
 const registers = @import("cpu/registers.zig");
 const Bus = @import("bus.zig").Bus;
-const rw = @import("cpu/rw.zig");
+const Location = @import("cpu/Location.zig").Location;
 const expect = std.testing.expect;
 
 const Registers = registers.Registers;
@@ -24,121 +24,121 @@ pub fn execute(self: *Self) void {
     switch (opcode) {
         0x00 => self.nop(),
         0x01 => self.ld16(.bc),
-        0x02 => self.ld(.{ .address = .bc }, .{ .reg8 = .a }),
+        0x02 => self.ld(.addr_bc, .a),
         0x03 => self.inc16(.bc),
         0x04 => self.inc(.b),
         0x05 => self.dec(.b),
-        0x06 => self.ld(.{ .reg8 = .b }, .{ .address = .imm }),
+        0x06 => self.ld(.b, .imm),
         0x08 => self.ldAbsSp(),
-        0x0A => self.ld(.{ .reg8 = .a }, .{ .address = .bc }),
+        0x0A => self.ld(.a, .addr_bc),
         0x0B => self.dec16(.bc),
         0x0C => self.inc(.c),
         0x0D => self.dec(.c),
-        0x0E => self.ld(.{ .reg8 = .c }, .{ .address = .imm }),
+        0x0E => self.ld(.c, .imm),
         0x11 => self.ld16(.de),
-        0x12 => self.ld(.{ .address = .de }, .{ .reg8 = .a }),
+        0x12 => self.ld(.addr_de, .a),
         0x13 => self.inc16(.de),
         0x14 => self.inc(.d),
         0x15 => self.dec(.d),
-        0x1A => self.ld(.{ .reg8 = .a }, .{ .address = .de }),
+        0x1A => self.ld(.a, .addr_de),
         0x1B => self.dec16(.de),
         0x1C => self.inc(.e),
         0x1D => self.dec(.e),
-        0x1E => self.ld(.{ .reg8 = .e }, .{ .address = .imm }),
-        0x16 => self.ld(.{ .reg8 = .d }, .{ .address = .imm }),
+        0x1E => self.ld(.e, .imm),
+        0x16 => self.ld(.d, .imm),
         0x21 => self.ld16(.hl),
-        0x22 => self.ld(.{ .address = .hli }, .{ .reg8 = .a }),
+        0x22 => self.ld(.addr_hli, .a),
         0x23 => self.inc16(.hl),
         0x24 => self.inc(.h),
         0x25 => self.dec(.h),
-        0x26 => self.ld(.{ .reg8 = .h }, .{ .address = .imm }),
-        0x2A => self.ld(.{ .reg8 = .a }, .{ .address = .hli }),
+        0x26 => self.ld(.h, .imm),
+        0x2A => self.ld(.a, .addr_hli),
         0x2B => self.dec16(.hl),
         0x2C => self.inc(.l),
         0x2D => self.dec(.l),
-        0x2E => self.ld(.{ .reg8 = .l }, .{ .address = .imm }),
+        0x2E => self.ld(.l, .imm),
         0x31 => self.ld16(.sp),
-        0x32 => self.ld(.{ .address = .hld }, .{ .reg8 = .a }),
+        0x32 => self.ld(.addr_hld, .a),
         0x33 => self.inc16(.sp),
-        0x34 => self.incHl(),
-        0x35 => self.decHl(),
-        0x36 => self.ld(.{ .address = .hl }, .{ .address = .imm }),
-        0x3A => self.ld(.{ .reg8 = .a }, .{ .address = .hld }),
+        0x34 => self.inc(.addr_hl),
+        0x35 => self.dec(.addr_hl),
+        0x36 => self.ld(.addr_hl, .imm),
+        0x3A => self.ld(.a, .addr_hld),
         0x3B => self.dec16(.sp),
         0x3C => self.inc(.a),
         0x3D => self.dec(.a),
-        0x3E => self.ld(.{ .reg8 = .a }, .{ .address = .imm }),
-        0x40 => self.ld(.{ .reg8 = .b }, .{ .reg8 = .b }),
-        0x41 => self.ld(.{ .reg8 = .b }, .{ .reg8 = .c }),
-        0x42 => self.ld(.{ .reg8 = .b }, .{ .reg8 = .d }),
-        0x43 => self.ld(.{ .reg8 = .b }, .{ .reg8 = .e }),
-        0x44 => self.ld(.{ .reg8 = .b }, .{ .reg8 = .h }),
-        0x45 => self.ld(.{ .reg8 = .b }, .{ .reg8 = .l }),
-        0x46 => self.ld(.{ .reg8 = .b }, .{ .address = .hl }),
-        0x47 => self.ld(.{ .reg8 = .b }, .{ .reg8 = .a }),
-        0x48 => self.ld(.{ .reg8 = .c }, .{ .reg8 = .b }),
-        0x49 => self.ld(.{ .reg8 = .c }, .{ .reg8 = .c }),
-        0x4A => self.ld(.{ .reg8 = .c }, .{ .reg8 = .d }),
-        0x4B => self.ld(.{ .reg8 = .c }, .{ .reg8 = .e }),
-        0x4C => self.ld(.{ .reg8 = .c }, .{ .reg8 = .h }),
-        0x4D => self.ld(.{ .reg8 = .c }, .{ .reg8 = .l }),
-        0x4E => self.ld(.{ .reg8 = .c }, .{ .address = .hl }),
-        0x4F => self.ld(.{ .reg8 = .c }, .{ .reg8 = .a }),
-        0x50 => self.ld(.{ .reg8 = .d }, .{ .reg8 = .b }),
-        0x51 => self.ld(.{ .reg8 = .d }, .{ .reg8 = .c }),
-        0x52 => self.ld(.{ .reg8 = .d }, .{ .reg8 = .d }),
-        0x53 => self.ld(.{ .reg8 = .d }, .{ .reg8 = .e }),
-        0x54 => self.ld(.{ .reg8 = .d }, .{ .reg8 = .h }),
-        0x55 => self.ld(.{ .reg8 = .d }, .{ .reg8 = .l }),
-        0x56 => self.ld(.{ .reg8 = .d }, .{ .address = .hl }),
-        0x57 => self.ld(.{ .reg8 = .d }, .{ .reg8 = .a }),
-        0x58 => self.ld(.{ .reg8 = .e }, .{ .reg8 = .b }),
-        0x59 => self.ld(.{ .reg8 = .e }, .{ .reg8 = .c }),
-        0x5A => self.ld(.{ .reg8 = .e }, .{ .reg8 = .d }),
-        0x5B => self.ld(.{ .reg8 = .e }, .{ .reg8 = .e }),
-        0x5C => self.ld(.{ .reg8 = .e }, .{ .reg8 = .h }),
-        0x5D => self.ld(.{ .reg8 = .e }, .{ .reg8 = .l }),
-        0x5E => self.ld(.{ .reg8 = .e }, .{ .address = .hl }),
-        0x5F => self.ld(.{ .reg8 = .e }, .{ .reg8 = .a }),
-        0x60 => self.ld(.{ .reg8 = .h }, .{ .reg8 = .b }),
-        0x61 => self.ld(.{ .reg8 = .h }, .{ .reg8 = .c }),
-        0x62 => self.ld(.{ .reg8 = .h }, .{ .reg8 = .d }),
-        0x63 => self.ld(.{ .reg8 = .h }, .{ .reg8 = .e }),
-        0x64 => self.ld(.{ .reg8 = .h }, .{ .reg8 = .h }),
-        0x65 => self.ld(.{ .reg8 = .h }, .{ .reg8 = .l }),
-        0x66 => self.ld(.{ .reg8 = .h }, .{ .address = .hl }),
-        0x67 => self.ld(.{ .reg8 = .h }, .{ .reg8 = .a }),
-        0x68 => self.ld(.{ .reg8 = .l }, .{ .reg8 = .b }),
-        0x69 => self.ld(.{ .reg8 = .l }, .{ .reg8 = .c }),
-        0x6A => self.ld(.{ .reg8 = .l }, .{ .reg8 = .d }),
-        0x6B => self.ld(.{ .reg8 = .l }, .{ .reg8 = .e }),
-        0x6C => self.ld(.{ .reg8 = .l }, .{ .reg8 = .h }),
-        0x6D => self.ld(.{ .reg8 = .l }, .{ .reg8 = .l }),
-        0x6E => self.ld(.{ .reg8 = .l }, .{ .address = .hl }),
-        0x6F => self.ld(.{ .reg8 = .l }, .{ .reg8 = .a }),
-        0x70 => self.ld(.{ .address = .hl }, .{ .reg8 = .b }),
-        0x71 => self.ld(.{ .address = .hl }, .{ .reg8 = .c }),
-        0x72 => self.ld(.{ .address = .hl }, .{ .reg8 = .d }),
-        0x73 => self.ld(.{ .address = .hl }, .{ .reg8 = .e }),
-        0x74 => self.ld(.{ .address = .hl }, .{ .reg8 = .h }),
-        0x75 => self.ld(.{ .address = .hl }, .{ .reg8 = .l }),
-        0x77 => self.ld(.{ .address = .hl }, .{ .reg8 = .a }),
-        0x78 => self.ld(.{ .reg8 = .a }, .{ .reg8 = .b }),
-        0x79 => self.ld(.{ .reg8 = .a }, .{ .reg8 = .c }),
-        0x7A => self.ld(.{ .reg8 = .a }, .{ .reg8 = .d }),
-        0x7B => self.ld(.{ .reg8 = .a }, .{ .reg8 = .e }),
-        0x7C => self.ld(.{ .reg8 = .a }, .{ .reg8 = .h }),
-        0x7D => self.ld(.{ .reg8 = .a }, .{ .reg8 = .l }),
-        0x7E => self.ld(.{ .reg8 = .a }, .{ .address = .hl }),
-        0x7F => self.ld(.{ .reg8 = .a }, .{ .reg8 = .a }),
-        0xE0 => self.ld(.{ .address = .zero_page }, .{ .reg8 = .a }),
-        0xE2 => self.ld(.{ .address = .zero_page_c }, .{ .reg8 = .a }),
-        0xEA => self.ld(.{ .address = .imm_word }, .{ .reg8 = .a }),
-        0xF0 => self.ld(.{ .reg8 = .a }, .{ .address = .zero_page }),
-        0xF2 => self.ld(.{ .reg8 = .a }, .{ .address = .zero_page_c }),
+        0x3E => self.ld(.a, .imm),
+        0x40 => self.ld(.b, .b),
+        0x41 => self.ld(.b, .c),
+        0x42 => self.ld(.b, .d),
+        0x43 => self.ld(.b, .e),
+        0x44 => self.ld(.b, .h),
+        0x45 => self.ld(.b, .l),
+        0x46 => self.ld(.b, .addr_hl),
+        0x47 => self.ld(.b, .a),
+        0x48 => self.ld(.c, .b),
+        0x49 => self.ld(.c, .c),
+        0x4A => self.ld(.c, .d),
+        0x4B => self.ld(.c, .e),
+        0x4C => self.ld(.c, .h),
+        0x4D => self.ld(.c, .l),
+        0x4E => self.ld(.c, .addr_hl),
+        0x4F => self.ld(.c, .a),
+        0x50 => self.ld(.d, .b),
+        0x51 => self.ld(.d, .c),
+        0x52 => self.ld(.d, .d),
+        0x53 => self.ld(.d, .e),
+        0x54 => self.ld(.d, .h),
+        0x55 => self.ld(.d, .l),
+        0x56 => self.ld(.d, .addr_hl),
+        0x57 => self.ld(.d, .a),
+        0x58 => self.ld(.e, .b),
+        0x59 => self.ld(.e, .c),
+        0x5A => self.ld(.e, .d),
+        0x5B => self.ld(.e, .e),
+        0x5C => self.ld(.e, .h),
+        0x5D => self.ld(.e, .l),
+        0x5E => self.ld(.e, .addr_hl),
+        0x5F => self.ld(.e, .a),
+        0x60 => self.ld(.h, .b),
+        0x61 => self.ld(.h, .c),
+        0x62 => self.ld(.h, .d),
+        0x63 => self.ld(.h, .e),
+        0x64 => self.ld(.h, .h),
+        0x65 => self.ld(.h, .l),
+        0x66 => self.ld(.h, .addr_hl),
+        0x67 => self.ld(.h, .a),
+        0x68 => self.ld(.l, .b),
+        0x69 => self.ld(.l, .c),
+        0x6A => self.ld(.l, .d),
+        0x6B => self.ld(.l, .e),
+        0x6C => self.ld(.l, .h),
+        0x6D => self.ld(.l, .l),
+        0x6E => self.ld(.l, .addr_hl),
+        0x6F => self.ld(.l, .a),
+        0x70 => self.ld(.addr_hl, .b),
+        0x71 => self.ld(.addr_hl, .c),
+        0x72 => self.ld(.addr_hl, .d),
+        0x73 => self.ld(.addr_hl, .e),
+        0x74 => self.ld(.addr_hl, .h),
+        0x75 => self.ld(.addr_hl, .l),
+        0x77 => self.ld(.addr_hl, .a),
+        0x78 => self.ld(.a, .b),
+        0x79 => self.ld(.a, .c),
+        0x7A => self.ld(.a, .d),
+        0x7B => self.ld(.a, .e),
+        0x7C => self.ld(.a, .h),
+        0x7D => self.ld(.a, .l),
+        0x7E => self.ld(.a, .addr_hl),
+        0x7F => self.ld(.a, .a),
+        0xE0 => self.ld(.zero_page, .a),
+        0xE2 => self.ld(.zero_page_c, .a),
+        0xEA => self.ld(.imm_word, .a),
+        0xF0 => self.ld(.a, .zero_page),
+        0xF2 => self.ld(.a, .zero_page_c),
         0xF8 => self.ldHlSpImm(),
         0xF9 => self.ldSpHl(),
-        0xFA => self.ld(.{ .reg8 = .a }, .{ .address = .imm_word }),
+        0xFA => self.ld(.a, .imm_word),
         else => {},
     }
 }
@@ -157,9 +157,9 @@ pub fn read16(self: *Self) u16 {
 
 fn nop(_: *Self) void {}
 
-fn ld(self: *Self, comptime dst: rw.Dst, comptime src: rw.Src) void {
-    const value = src.read(self);
-    dst.write(self, value);
+fn ld(self: *Self, comptime dst: Location, comptime src: Location) void {
+    const value = src.get(self);
+    dst.set(self, value);
 }
 
 fn ld16(self: *Self, comptime reg: Reg16) void {
@@ -174,7 +174,8 @@ fn ldAbsSp(self: *Self) void {
 }
 
 fn ldHlSpImm(self: *Self) void {
-    const offset: u16 = @bitCast(@as(i16, @as(i8, @bitCast(self.read8()))));
+    const unsigned: i16 = @as(i8, @bitCast(self.read8()));
+    const offset: u16 = @bitCast(unsigned);
     const sp = self.regs._16.get(.sp);
 
     self.regs._16.set(.hl, sp +% offset);
@@ -195,14 +196,14 @@ fn ldSpHl(self: *Self) void {
     self.bus.tick();
 }
 
-fn inc(self: *Self, comptime reg: Reg8) void {
-    const value = self.regs._8.get(reg);
-    self.regs._8.set(reg, value +% 1);
-}
+fn inc(self: *Self, comptime loc: Location) void {
+    const value = loc.get(self);
 
-fn incHl(self: *Self) void {
-    const value = self.regs._16.get(.hl);
-    self.regs._16.set(.hl, value +% 1);
+    self.regs.f.z = @intFromBool(value == 0);
+    self.regs.f.n = 0;
+    self.regs.f.h = @intFromBool(value & 0x0F == 0x0F);
+
+    loc.set(self, value +% 1);
 }
 
 fn inc16(self: *Self, comptime reg: Reg16) void {
@@ -211,14 +212,14 @@ fn inc16(self: *Self, comptime reg: Reg16) void {
     self.bus.tick();
 }
 
-fn dec(self: *Self, comptime reg: Reg8) void {
-    const value = self.regs._8.get(reg);
-    self.regs._8.set(reg, value -% 1);
-}
+fn dec(self: *Self, comptime loc: Location) void {
+    const value = loc.get(self);
 
-fn decHl(self: *Self) void {
-    const value = self.regs._16.get(.hl);
-    self.regs._16.set(.hl, value -% 1);
+    self.regs.f.z = @intFromBool(value == 0);
+    self.regs.f.n = 1;
+    self.regs.f.h = @intFromBool(value & 0x0F == 0x00);
+
+    loc.set(self, value -% 1);
 }
 
 fn dec16(self: *Self, comptime reg: Reg16) void {
@@ -229,23 +230,56 @@ fn dec16(self: *Self, comptime reg: Reg16) void {
 
 test "ld16" {
     var bus = Bus{ .test_bus = .{} };
-
     var cpu = init(&bus);
+    const ram = &bus.test_bus.ram;
 
-    bus.test_bus.ram[0x0100] = 0x01;
-    bus.test_bus.ram[0x0101] = 0xF0;
-    bus.test_bus.ram[0x0102] = 0x0F;
+    ram[registers.start_addr] = 0x01;
+    ram[registers.start_addr + 1] = 0xF0;
+    ram[registers.start_addr + 2] = 0x0F;
     cpu.execute();
     try expect(cpu.regs._16.get(.bc) == 0x0FF0);
 }
 
-test "ldRR" {
+test "ld" {
     var bus = Bus{ .test_bus = .{} };
-
     var cpu = init(&bus);
-    bus.test_bus.ram[0x0100] = 0x41;
+    const ram = &bus.test_bus.ram;
+
+    ram[registers.start_addr] = 0x41;
     cpu.regs._8.set(.b, 0x00);
     cpu.regs._8.set(.c, 0xFF);
     cpu.execute();
     try expect(cpu.regs._8.get(.b) == 0xFF);
+}
+
+test "inc" {
+    var bus = Bus{ .test_bus = .{} };
+    var cpu = init(&bus);
+    const ram = &bus.test_bus.ram;
+
+    cpu.regs._8.set(.h, 0x4F);
+    ram[registers.start_addr] = 0x24;
+    cpu.execute();
+
+    try expect(cpu.regs._8.get(.h) == 0x50);
+    try expect(cpu.regs.f.z == 0);
+    try expect(cpu.regs.f.n == 0);
+    try expect(cpu.regs.f.h == 1);
+}
+
+test "dec" {
+    var bus = Bus{ .test_bus = .{} };
+    var cpu = init(&bus);
+    const ram = &bus.test_bus.ram;
+
+    const dec_addr = 0x54F3;
+    cpu.regs._16.set(.hl, dec_addr);
+    ram[registers.start_addr] = 0x35;
+    ram[dec_addr] = 0xA0;
+    cpu.execute();
+
+    try expect(ram[dec_addr] == 0x9F);
+    try expect(cpu.regs.f.z == 0);
+    try expect(cpu.regs.f.n == 1);
+    try expect(cpu.regs.f.h == 1);
 }

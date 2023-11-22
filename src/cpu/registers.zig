@@ -27,6 +27,8 @@ pub const Flags = packed struct {
     z: u1,
 };
 
+pub const start_addr = 0x0100;
+
 pub const Registers = extern union {
     const Self = @This();
 
@@ -41,7 +43,7 @@ pub const Registers = extern union {
         regs.set(.de, 0x00C1);
         regs.set(.hl, 0x8403);
         regs.set(.sp, 0xFFFE);
-        regs.set(.pc, 0x0100);
+        regs.set(.pc, start_addr);
 
         return .{
             ._16 = regs,
