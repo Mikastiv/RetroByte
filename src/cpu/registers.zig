@@ -21,10 +21,10 @@ pub fn RegisterArray(comptime Reg: type, comptime T: type) type {
 
 pub const Flags = packed struct {
     _unused: u4,
-    c: u1,
-    h: u1,
-    n: u1,
-    z: u1,
+    c: bool,
+    h: bool,
+    n: bool,
+    z: bool,
 };
 
 pub const start_addr = 0x0100;
@@ -72,10 +72,10 @@ test "flags" {
     var regs: Registers = undefined;
 
     regs._8.set(.f, 0);
-    regs.f.z = 1;
+    regs.f.z = true;
     try expect(regs._8.get(.f) == 0x80);
-    regs.f.c = 1;
+    regs.f.c = true;
     try expect(regs._8.get(.f) == 0x90);
-    regs.f.n = 1;
+    regs.f.n = true;
     try expect(regs._8.get(.f) == 0xD0);
 }

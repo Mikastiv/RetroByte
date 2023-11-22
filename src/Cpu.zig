@@ -2,7 +2,7 @@ const std = @import("std");
 const Self = @This();
 const registers = @import("cpu/registers.zig");
 const Bus = @import("bus.zig").Bus;
-const Location = @import("cpu/Location.zig").Location;
+const Mode = @import("cpu/mode.zig").Mode;
 const expect = std.testing.expect;
 
 const Registers = registers.Registers;
@@ -157,7 +157,7 @@ pub fn read16(self: *Self) u16 {
 
 fn nop(_: *Self) void {}
 
-fn ld(self: *Self, comptime dst: Location, comptime src: Location) void {
+fn ld(self: *Self, comptime dst: Mode, comptime src: Mode) void {
     const value = src.get(self);
     dst.set(self, value);
 }
@@ -169,8 +169,9 @@ fn ld16(self: *Self, comptime reg: Reg16) void {
 
 fn ldAbsSp(self: *Self) void {
     const addr = self.read16();
-    self.bus.write(addr, @truncate(self.regs._16.get(.sp)));
-    self.bus.write(addr +% 1, @intCast(self.regs._16.get(.sp) >> 8));
+    const sp = self.regs._16.get(.sp);
+    self.bus.write(addr, @truncate(sp));
+    self.bus.write(addr +% 1, @intCast(sp >> 8));
 }
 
 fn ldHlSpImm(self: *Self) void {
@@ -182,10 +183,10 @@ fn ldHlSpImm(self: *Self) void {
 
     const carry = (sp & 0xFF) + (offset & 0xFF) > 0xFF;
     const half = (sp & 0xF) + (offset & 0xF) > 0xF;
-    self.regs.f.c = @intFromBool(carry);
-    self.regs.f.h = @intFromBool(half);
-    self.regs.f.n = 0;
-    self.regs.f.z = 0;
+    self.regs.f.c = carry;
+    self.regs.f.h = half;
+    self.regs.f.n = false;
+    self.regs.f.z = false;
 
     self.bus.tick();
 }
@@ -196,12 +197,12 @@ fn ldSpHl(self: *Self) void {
     self.bus.tick();
 }
 
-fn inc(self: *Self, comptime loc: Location) void {
+fn inc(self: *Self, comptime loc: Mode) void {
     const value = loc.get(self);
 
-    self.regs.f.z = @intFromBool(value == 0);
-    self.regs.f.n = 0;
-    self.regs.f.h = @intFromBool(value & 0x0F == 0x0F);
+    self.regs.f.z = value == 0;
+    self.regs.f.n = false;
+    self.regs.f.h = value & 0x0F == 0x0F;
 
     loc.set(self, value +% 1);
 }
@@ -212,12 +213,12 @@ fn inc16(self: *Self, comptime reg: Reg16) void {
     self.bus.tick();
 }
 
-fn dec(self: *Self, comptime loc: Location) void {
+fn dec(self: *Self, comptime loc: Mode) void {
     const value = loc.get(self);
 
-    self.regs.f.z = @intFromBool(value == 0);
-    self.regs.f.n = 1;
-    self.regs.f.h = @intFromBool(value & 0x0F == 0x00);
+    self.regs.f.z = value == 0;
+    self.regs.f.n = true;
+    self.regs.f.h = value & 0x0F == 0x00;
 
     loc.set(self, value -% 1);
 }
@@ -262,9 +263,9 @@ test "inc" {
     cpu.execute();
 
     try expect(cpu.regs._8.get(.h) == 0x50);
-    try expect(cpu.regs.f.z == 0);
-    try expect(cpu.regs.f.n == 0);
-    try expect(cpu.regs.f.h == 1);
+    try expect(cpu.regs.f.z == false);
+    try expect(cpu.regs.f.n == false);
+    try expect(cpu.regs.f.h == true);
 }
 
 test "dec" {
@@ -279,7 +280,7 @@ test "dec" {
     cpu.execute();
 
     try expect(ram[dec_addr] == 0x9F);
-    try expect(cpu.regs.f.z == 0);
-    try expect(cpu.regs.f.n == 1);
-    try expect(cpu.regs.f.h == 1);
+    try expect(cpu.regs.f.z == false);
+    try expect(cpu.regs.f.n == true);
+    try expect(cpu.regs.f.h == true);
 }
