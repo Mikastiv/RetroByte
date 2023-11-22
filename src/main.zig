@@ -72,4 +72,5 @@ pub fn main() !void {
 
 test {
     _ = @import("Cpu.zig");
+    _ = @import("cpu/registers.zig");
 }

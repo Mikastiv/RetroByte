@@ -1,11 +1,13 @@
 const std = @import("std");
 const Self = @This();
-const Registers = @import("cpu/Registers.zig");
+const registers = @import("cpu/registers.zig");
 const Bus = @import("bus.zig").Bus;
-const expect = std.testing.expect;
 const rw = @import("cpu/rw.zig");
-const Reg16 = Registers.Reg16;
-// const Reg8 = Registers.Reg8;
+const expect = std.testing.expect;
+
+const Registers = registers.Registers;
+const Reg16 = registers.Reg16;
+const Reg8 = registers.Reg8;
 
 regs: Registers,
 bus: *Bus,
@@ -24,47 +26,47 @@ pub fn execute(self: *Self) void {
         0x01 => self.ld16(.bc),
         0x02 => self.ld(.{ .address = .bc }, .{ .reg8 = .a }),
         0x03 => self.inc16(.bc),
-        0x04 => self.inc(.{ .reg8 = .b }, .{ .reg8 = .b }),
-        0x05 => self.dec(.{ .reg8 = .b }, .{ .reg8 = .b }),
+        0x04 => self.inc(.b),
+        0x05 => self.dec(.b),
         0x06 => self.ld(.{ .reg8 = .b }, .{ .address = .imm }),
         0x08 => self.ldAbsSp(),
         0x0A => self.ld(.{ .reg8 = .a }, .{ .address = .bc }),
         0x0B => self.dec16(.bc),
-        0x0C => self.inc(.{ .reg8 = .c }, .{ .reg8 = .c }),
-        0x0D => self.dec(.{ .reg8 = .c }, .{ .reg8 = .c }),
+        0x0C => self.inc(.c),
+        0x0D => self.dec(.c),
         0x0E => self.ld(.{ .reg8 = .c }, .{ .address = .imm }),
         0x11 => self.ld16(.de),
         0x12 => self.ld(.{ .address = .de }, .{ .reg8 = .a }),
         0x13 => self.inc16(.de),
-        0x14 => self.inc(.{ .reg8 = .d }, .{ .reg8 = .d }),
-        0x15 => self.dec(.{ .reg8 = .d }, .{ .reg8 = .d }),
+        0x14 => self.inc(.d),
+        0x15 => self.dec(.d),
         0x1A => self.ld(.{ .reg8 = .a }, .{ .address = .de }),
         0x1B => self.dec16(.de),
-        0x1C => self.inc(.{ .reg8 = .e }, .{ .reg8 = .e }),
-        0x1D => self.dec(.{ .reg8 = .e }, .{ .reg8 = .e }),
+        0x1C => self.inc(.e),
+        0x1D => self.dec(.e),
         0x1E => self.ld(.{ .reg8 = .e }, .{ .address = .imm }),
         0x16 => self.ld(.{ .reg8 = .d }, .{ .address = .imm }),
         0x21 => self.ld16(.hl),
         0x22 => self.ld(.{ .address = .hli }, .{ .reg8 = .a }),
         0x23 => self.inc16(.hl),
-        0x24 => self.inc(.{ .reg8 = .h }, .{ .reg8 = .h }),
-        0x25 => self.dec(.{ .reg8 = .h }, .{ .reg8 = .h }),
+        0x24 => self.inc(.h),
+        0x25 => self.dec(.h),
         0x26 => self.ld(.{ .reg8 = .h }, .{ .address = .imm }),
         0x2A => self.ld(.{ .reg8 = .a }, .{ .address = .hli }),
         0x2B => self.dec16(.hl),
-        0x2C => self.inc(.{ .reg8 = .l }, .{ .reg8 = .l }),
-        0x2D => self.dec(.{ .reg8 = .l }, .{ .reg8 = .l }),
+        0x2C => self.inc(.l),
+        0x2D => self.dec(.l),
         0x2E => self.ld(.{ .reg8 = .l }, .{ .address = .imm }),
         0x31 => self.ld16(.sp),
         0x32 => self.ld(.{ .address = .hld }, .{ .reg8 = .a }),
         0x33 => self.inc16(.sp),
-        0x34 => self.inc(.{ .address = .hl }, .{ .address = .hl }),
-        0x35 => self.dec(.{ .address = .hl }, .{ .address = .hl }),
+        0x34 => self.incHl(),
+        0x35 => self.decHl(),
         0x36 => self.ld(.{ .address = .hl }, .{ .address = .imm }),
         0x3A => self.ld(.{ .reg8 = .a }, .{ .address = .hld }),
         0x3B => self.dec16(.sp),
-        0x3C => self.inc(.{ .reg8 = .a }, .{ .reg8 = .a }),
-        0x3D => self.dec(.{ .reg8 = .a }, .{ .reg8 = .a }),
+        0x3C => self.inc(.a),
+        0x3D => self.dec(.a),
         0x3E => self.ld(.{ .reg8 = .a }, .{ .address = .imm }),
         0x40 => self.ld(.{ .reg8 = .b }, .{ .reg8 = .b }),
         0x41 => self.ld(.{ .reg8 = .b }, .{ .reg8 = .c }),
@@ -131,7 +133,7 @@ pub fn execute(self: *Self) void {
         0x7F => self.ld(.{ .reg8 = .a }, .{ .reg8 = .a }),
         0xE0 => self.ld(.{ .address = .zero_page }, .{ .reg8 = .a }),
         0xE2 => self.ld(.{ .address = .zero_page_c }, .{ .reg8 = .a }),
-        0xEA => self.ld(.{ .address = .absolute }, .{ .reg8 = .a }),
+        0xEA => self.ld(.{ .address = .imm_word }, .{ .reg8 = .a }),
         0xF0 => self.ld(.{ .reg8 = .a }, .{ .address = .zero_page }),
         0xF2 => self.ld(.{ .reg8 = .a }, .{ .address = .zero_page_c }),
         0xF8 => self.ldHlSpImm(),
@@ -142,8 +144,8 @@ pub fn execute(self: *Self) void {
 }
 
 pub fn read8(self: *Self) u8 {
-    const byte: u8 = self.bus.read(self.regs.pc);
-    self.regs.pc +%= 1;
+    const byte: u8 = self.bus.read(self.regs._16.get(.pc));
+    self.regs.incPc();
     return byte;
 }
 
@@ -162,80 +164,67 @@ fn ld(self: *Self, comptime dst: rw.Dst, comptime src: rw.Src) void {
 
 fn ld16(self: *Self, comptime reg: Reg16) void {
     const value = self.read16();
-    self.regs.write16(reg, value);
+    self.regs._16.set(reg, value);
 }
 
 fn ldAbsSp(self: *Self) void {
     const addr = self.read16();
-    self.bus.write(addr, @truncate(self.regs.sp));
-    self.bus.write(addr +% 1, @intCast(self.regs.sp >> 8));
+    self.bus.write(addr, @truncate(self.regs._16.get(.sp)));
+    self.bus.write(addr +% 1, @intCast(self.regs._16.get(.sp) >> 8));
 }
 
 fn ldHlSpImm(self: *Self) void {
-    const offset: u16 = @bitCast(@as(i16, @bitCast(self.read8())));
-    const sp = self.regs.sp;
+    const offset: u16 = @bitCast(@as(i16, @as(i8, @bitCast(self.read8()))));
+    const sp = self.regs._16.get(.sp);
 
-    self.regs.write16(.hl, sp +% offset);
+    self.regs._16.set(.hl, sp +% offset);
 
     const carry = (sp & 0xFF) + (offset & 0xFF) > 0xFF;
     const half = (sp & 0xF) + (offset & 0xF) > 0xF;
-    self.regs.f.bits.c = @intFromBool(carry);
-    self.regs.f.bits.h = @intFromBool(half);
-    self.regs.f.bits.n = 0;
-    self.regs.f.bits.z = 0;
+    self.regs.f.c = @intFromBool(carry);
+    self.regs.f.h = @intFromBool(half);
+    self.regs.f.n = 0;
+    self.regs.f.z = 0;
 
     self.bus.tick();
 }
 
 fn ldSpHl(self: *Self) void {
-    self.regs.sp = self.regs.read16(.hl);
+    const hl = self.regs._16.get(.hl);
+    self.regs._16.set(.sp, hl);
     self.bus.tick();
 }
 
-fn inc(self: *Self, comptime dst: rw.Dst, comptime src: rw.Src) void {
-    const value = src.read(self);
-    dst.write(self, value +% 1);
+fn inc(self: *Self, comptime reg: Reg8) void {
+    const value = self.regs._8.get(reg);
+    self.regs._8.set(reg, value +% 1);
+}
+
+fn incHl(self: *Self) void {
+    const value = self.regs._16.get(.hl);
+    self.regs._16.set(.hl, value +% 1);
 }
 
 fn inc16(self: *Self, comptime reg: Reg16) void {
-    const value = self.regs.read16(reg);
-    self.regs.write16(reg, value +% 1);
+    const value = self.regs._16.get(reg);
+    self.regs._16.set(reg, value +% 1);
     self.bus.tick();
 }
 
-fn dec(self: *Self, comptime dst: rw.Dst, comptime src: rw.Src) void {
-    const value = src.read(self);
-    dst.write(self, value -% 1);
+fn dec(self: *Self, comptime reg: Reg8) void {
+    const value = self.regs._8.get(reg);
+    self.regs._8.set(reg, value -% 1);
+}
+
+fn decHl(self: *Self) void {
+    const value = self.regs._16.get(.hl);
+    self.regs._16.set(.hl, value -% 1);
 }
 
 fn dec16(self: *Self, comptime reg: Reg16) void {
-    const value = self.regs.read16(reg);
-    self.regs.write16(reg, value -% 1);
+    const value = self.regs._16.get(reg);
+    self.regs._16.set(reg, value -% 1);
     self.bus.tick();
-}
-
-test "registers" {
-    var regs: Registers = undefined;
-
-    regs.b = 0x7A;
-    regs.c = 0xFF;
-    try expect(regs.read16(.bc) == 0x7AFF);
-
-    regs.write16(.af, 0xBEEF);
-    try expect(regs.a == 0xBE and regs.f.raw == 0xEF);
-    try expect(regs.read16(.af) == 0xBEEF);
-}
-
-test "flags" {
-    var regs: Registers = undefined;
-
-    regs.f.raw = 0;
-    regs.f.bits.z = 1;
-    try expect(regs.f.raw == 0x80);
-    regs.f.bits.c = 1;
-    try expect(regs.f.raw == 0x90);
-    regs.f.bits.n = 1;
-    try expect(regs.f.raw == 0xD0);
 }
 
 test "ld16" {
@@ -247,7 +236,7 @@ test "ld16" {
     bus.test_bus.ram[0x0101] = 0xF0;
     bus.test_bus.ram[0x0102] = 0x0F;
     cpu.execute();
-    try expect(cpu.regs.read16(.bc) == 0x0FF0);
+    try expect(cpu.regs._16.get(.bc) == 0x0FF0);
 }
 
 test "ldRR" {
@@ -255,8 +244,8 @@ test "ldRR" {
 
     var cpu = init(&bus);
     bus.test_bus.ram[0x0100] = 0x41;
-    cpu.regs.b = 0x00;
-    cpu.regs.c = 0xFF;
+    cpu.regs._8.set(.b, 0x00);
+    cpu.regs._8.set(.c, 0xFF);
     cpu.execute();
-    try expect(cpu.regs.b == 0xFF);
+    try expect(cpu.regs._8.get(.b) == 0xFF);
 }

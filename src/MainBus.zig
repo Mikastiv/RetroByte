@@ -23,4 +23,4 @@ pub fn write(self: *Self, addr: u16, data: u8) void {
     self.ram[addr] = data;
 }
 
-pub fn tick(_: *anyopaque) void {}
+pub fn tick(_: *Self) void {}
