@@ -133,12 +133,12 @@ pub fn execute(self: *Self) void {
         0x7F => self.ld(.a, .a),
         0xE0 => self.ld(.zero_page, .a),
         0xE2 => self.ld(.zero_page_c, .a),
-        0xEA => self.ld(.imm_word, .a),
+        0xEA => self.ld(.absolute, .a),
         0xF0 => self.ld(.a, .zero_page),
         0xF2 => self.ld(.a, .zero_page_c),
         0xF8 => self.ldHlSpImm(),
         0xF9 => self.ldSpHl(),
-        0xFA => self.ld(.a, .imm_word),
+        0xFA => self.ld(.a, .absolute),
         else => {},
     }
 }
@@ -199,12 +199,13 @@ fn ldSpHl(self: *Self) void {
 
 fn inc(self: *Self, comptime loc: Mode) void {
     const value = loc.get(self);
+    const new_value = value +% 1;
 
-    self.regs.f.z = value == 0;
+    self.regs.f.z = new_value == 0;
     self.regs.f.n = false;
     self.regs.f.h = value & 0x0F == 0x0F;
 
-    loc.set(self, value +% 1);
+    loc.set(self, new_value);
 }
 
 fn inc16(self: *Self, comptime reg: Reg16) void {
@@ -215,12 +216,13 @@ fn inc16(self: *Self, comptime reg: Reg16) void {
 
 fn dec(self: *Self, comptime loc: Mode) void {
     const value = loc.get(self);
+    const new_value = value -% 1;
 
-    self.regs.f.z = value == 0;
+    self.regs.f.z = new_value == 0;
     self.regs.f.n = true;
     self.regs.f.h = value & 0x0F == 0x00;
 
-    loc.set(self, value -% 1);
+    loc.set(self, new_value);
 }
 
 fn dec16(self: *Self, comptime reg: Reg16) void {
@@ -266,6 +268,15 @@ test "inc" {
     try expect(cpu.regs.f.z == false);
     try expect(cpu.regs.f.n == false);
     try expect(cpu.regs.f.h == true);
+
+    cpu.regs._8.set(.a, 0xFF);
+    ram[registers.start_addr + 1] = 0x3C;
+    cpu.execute();
+
+    try expect(cpu.regs._8.get(.a) == 0x00);
+    try expect(cpu.regs.f.z == true);
+    try expect(cpu.regs.f.n == false);
+    try expect(cpu.regs.f.h == true);
 }
 
 test "dec" {
@@ -283,4 +294,13 @@ test "dec" {
     try expect(cpu.regs.f.z == false);
     try expect(cpu.regs.f.n == true);
     try expect(cpu.regs.f.h == true);
+
+    cpu.regs._8.set(.e, 0x01);
+    ram[registers.start_addr + 1] = 0x1D;
+    cpu.execute();
+
+    try expect(cpu.regs._8.get(.e) == 0x00);
+    try expect(cpu.regs.f.z == true);
+    try expect(cpu.regs.f.n == true);
+    try expect(cpu.regs.f.h == false);
 }

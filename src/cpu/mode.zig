@@ -15,7 +15,7 @@ pub const Mode = enum {
     addr_hli,
     addr_hld,
     imm,
-    imm_word,
+    absolute,
     zero_page,
     zero_page_c,
 
@@ -34,7 +34,7 @@ pub const Mode = enum {
                 cpu.regs._16.set(.hl, addr -% 1);
                 break :blk addr;
             },
-            .imm_word => cpu.read16(),
+            .absolute => cpu.read16(),
             .zero_page => blk: {
                 const lo: u16 = cpu.read8();
                 const addr = 0xFF00 | lo;
