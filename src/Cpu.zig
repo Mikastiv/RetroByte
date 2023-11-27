@@ -131,14 +131,86 @@ pub fn execute(self: *Self) void {
         0x7D => self.ld(.a, .l),
         0x7E => self.ld(.a, .addr_hl),
         0x7F => self.ld(.a, .a),
+        0x80 => self.add(.b),
+        0x81 => self.add(.c),
+        0x82 => self.add(.d),
+        0x83 => self.add(.e),
+        0x84 => self.add(.h),
+        0x85 => self.add(.l),
+        0x86 => self.add(.addr_hl),
+        0x87 => self.add(.a),
+        0x88 => self.adc(.b),
+        0x89 => self.adc(.c),
+        0x8A => self.adc(.d),
+        0x8B => self.adc(.e),
+        0x8C => self.adc(.h),
+        0x8D => self.adc(.l),
+        0x8E => self.adc(.addr_hl),
+        0x8F => self.adc(.a),
+        0x90 => self.sub(.b),
+        0x91 => self.sub(.c),
+        0x92 => self.sub(.d),
+        0x93 => self.sub(.e),
+        0x94 => self.sub(.h),
+        0x95 => self.sub(.l),
+        0x96 => self.sub(.addr_hl),
+        0x97 => self.sub(.a),
+        0x98 => self.sbc(.b),
+        0x99 => self.sbc(.c),
+        0x9A => self.sbc(.d),
+        0x9B => self.sbc(.e),
+        0x9C => self.sbc(.h),
+        0x9D => self.sbc(.l),
+        0x9E => self.sbc(.addr_hl),
+        0x9F => self.sbc(.a),
+        0xA0 => self.bitAnd(.b),
+        0xA1 => self.bitAnd(.c),
+        0xA2 => self.bitAnd(.d),
+        0xA3 => self.bitAnd(.e),
+        0xA4 => self.bitAnd(.h),
+        0xA5 => self.bitAnd(.l),
+        0xA6 => self.bitAnd(.addr_hl),
+        0xA7 => self.bitAnd(.a),
+        0xA8 => self.bitXor(.b),
+        0xA9 => self.bitXor(.c),
+        0xAA => self.bitXor(.d),
+        0xAB => self.bitXor(.e),
+        0xAC => self.bitXor(.h),
+        0xAD => self.bitXor(.l),
+        0xAE => self.bitXor(.addr_hl),
+        0xAF => self.bitXor(.a),
+        0xB0 => self.bitOr(.b),
+        0xB1 => self.bitOr(.c),
+        0xB2 => self.bitOr(.d),
+        0xB3 => self.bitOr(.e),
+        0xB4 => self.bitOr(.h),
+        0xB5 => self.bitOr(.l),
+        0xB6 => self.bitOr(.addr_hl),
+        0xB7 => self.bitOr(.a),
+        0xB8 => self.cp(.b),
+        0xB9 => self.cp(.c),
+        0xBA => self.cp(.d),
+        0xBB => self.cp(.e),
+        0xBC => self.cp(.h),
+        0xBD => self.cp(.l),
+        0xBE => self.cp(.addr_hl),
+        0xBF => self.cp(.a),
+        0xC6 => self.add(.imm),
+        0xCE => self.adc(.imm),
+        0xD6 => self.sub(.imm),
+        0xDE => self.sbc(.imm),
         0xE0 => self.ld(.zero_page, .a),
         0xE2 => self.ld(.zero_page_c, .a),
+        0xE6 => self.bitAnd(.imm),
         0xEA => self.ld(.absolute, .a),
+        0xEE => self.bitXor(.imm),
         0xF0 => self.ld(.a, .zero_page),
         0xF2 => self.ld(.a, .zero_page_c),
+        0xF6 => self.bitOr(.imm),
         0xF8 => self.ldHlSpImm(),
         0xF9 => self.ldSpHl(),
         0xFA => self.ld(.a, .absolute),
+        0xFE => self.cp(.imm),
         else => {},
     }
 }
@@ -201,9 +273,9 @@ fn inc(self: *Self, comptime loc: Mode) void {
     const value = loc.get(self);
     const new_value = value +% 1;
 
-    self.regs.f.z = new_value == 0;
-    self.regs.f.n = false;
     self.regs.f.h = value & 0x0F == 0x0F;
+    self.regs.f.n = false;
+    self.regs.f.z = new_value == 0;
 
     loc.set(self, new_value);
 }
@@ -218,9 +290,9 @@ fn dec(self: *Self, comptime loc: Mode) void {
     const value = loc.get(self);
     const new_value = value -% 1;
 
-    self.regs.f.z = new_value == 0;
-    self.regs.f.n = true;
     self.regs.f.h = value & 0x0F == 0x00;
+    self.regs.f.n = true;
+    self.regs.f.z = new_value == 0;
 
     loc.set(self, new_value);
 }
@@ -229,6 +301,93 @@ fn dec16(self: *Self, comptime reg: Reg16) void {
     const value = self.regs._16.get(reg);
     self.regs._16.set(reg, value -% 1);
     self.bus.tick();
+}
+
+fn alu_add(self: *Self, value: u8, cy: u1) void {
+    const a: u16 = self.regs._8.get(.a);
+    const result: u16 = a + value + cy;
+
+    self.regs.f.c = result > 0xFF;
+    self.regs.f.h = (a & 0x0F) + (value & 0x0F) + cy > 0x0F;
+    self.regs.f.n = false;
+    self.regs.f.z = result & 0xFF == 0;
+
+    self.regs._8.set(.a, @truncate(result));
+}
+
+fn add(self: *Self, comptime loc: Mode) void {
+    const value = loc.get(self);
+    self.alu_add(value, 0);
+}
+
+fn adc(self: *Self, comptime loc: Mode) void {
+    const value = loc.get(self);
+    self.alu_add(value, @intFromBool(self.regs.f.c));
+}
+
+fn alu_sub(self: *Self, value: u8, cy: u1) u8 {
+    const a = self.regs._8.get(.a);
+    const result = a -% value -% cy;
+
+    self.regs.f.c = @as(u16, a) < @as(u16, value) + cy;
+    self.regs.f.h = (a & 0x0F) < (value & 0x0F) + cy;
+    self.regs.f.n = true;
+    self.regs.f.z = result == 0;
+
+    return result;
+}
+
+fn sub(self: *Self, comptime loc: Mode) void {
+    const value = loc.get(self);
+    const result = self.alu_sub(value, 0);
+    self.regs._8.set(.a, result);
+}
+
+fn sbc(self: *Self, comptime loc: Mode) void {
+    const value = loc.get(self);
+    const result = self.alu_sub(value, @intFromBool(self.regs.f.c));
+    self.regs._8.set(.a, result);
+}
+
+fn bitAnd(self: *Self, comptime loc: Mode) void {
+    const value = loc.get(self);
+    const result = self.regs._8.get(.a) & value;
+
+    self.regs.f.c = false;
+    self.regs.f.h = true;
+    self.regs.f.n = false;
+    self.regs.f.z = result == 0;
+
+    self.regs._8.set(.a, result);
+}
+
+fn bitXor(self: *Self, comptime loc: Mode) void {
+    const value = loc.get(self);
+    const result = self.regs._8.get(.a) ^ value;
+
+    self.regs.f.c = false;
+    self.regs.f.h = false;
+    self.regs.f.n = false;
+    self.regs.f.z = result == 0;
+
+    self.regs._8.set(.a, result);
+}
+
+fn bitOr(self: *Self, comptime loc: Mode) void {
+    const value = loc.get(self);
+    const result = self.regs._8.get(.a) | value;
+
+    self.regs.f.c = false;
+    self.regs.f.h = false;
+    self.regs.f.n = false;
+    self.regs.f.z = result == 0;
+
+    self.regs._8.set(.a, result);
+}
+
+fn cp(self: *Self, comptime loc: Mode) void {
+    const value = loc.get(self);
+    _ = self.alu_sub(value, 0);
 }
 
 test "ld16" {
@@ -303,4 +462,41 @@ test "dec" {
     try expect(cpu.regs.f.z == true);
     try expect(cpu.regs.f.n == true);
     try expect(cpu.regs.f.h == false);
+}
+
+test "add" {
+    var bus = Bus{ .test_bus = .{} };
+    var cpu = init(&bus);
+    const ram = &bus.test_bus.ram;
+
+    cpu.regs._8.set(.a, 0x01);
+    cpu.regs._8.set(.c, 0xFF);
+    ram[registers.start_addr] = 0x81;
+    cpu.execute();
+
+    try expect(cpu.regs._8.get(.a) == 0x00);
+    try expect(cpu.regs.f.z == true);
+    try expect(cpu.regs.f.h == true);
+    try expect(cpu.regs.f.n == false);
+    try expect(cpu.regs.f.c == true);
+}
+
+test "adc" {
+    var bus = Bus{ .test_bus = .{} };
+    var cpu = init(&bus);
+    const ram = &bus.test_bus.ram;
+
+    const addr = 0x43A6;
+    cpu.regs._8.set(.a, 0x00);
+    cpu.regs._16.set(.hl, addr);
+    ram[addr] = 0x0F;
+    cpu.regs.f.c = true;
+    ram[registers.start_addr] = 0x8E;
+    cpu.execute();
+
+    try expect(cpu.regs._8.get(.a) == 0x10);
+    try expect(cpu.regs.f.z == false);
+    try expect(cpu.regs.f.h == true);
+    try expect(cpu.regs.f.n == false);
+    try expect(cpu.regs.f.c == false);
 }
