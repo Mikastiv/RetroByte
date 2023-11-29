@@ -1,6 +1,6 @@
 const Cpu = @import("../Cpu.zig");
 
-pub const Mode = enum {
+pub const Location = enum {
     a,
     f,
     b,
@@ -19,7 +19,7 @@ pub const Mode = enum {
     zero_page,
     zero_page_c,
 
-    pub fn getAddress(comptime loc: Mode, cpu: *Cpu) u16 {
+    pub fn getAddress(comptime loc: Location, cpu: *Cpu) u16 {
         return switch (loc) {
             .addr_bc => cpu.regs._16.get(.bc),
             .addr_de => cpu.regs._16.get(.de),
@@ -45,11 +45,11 @@ pub const Mode = enum {
                 const addr = 0xFF00 | lo;
                 break :blk addr;
             },
-            else => @compileError("incompatible address mode " ++ @tagName(loc)),
+            else => @compileError("incompatible address loc " ++ @tagName(loc)),
         };
     }
 
-    pub fn get(comptime loc: Mode, cpu: *Cpu) u8 {
+    pub fn getValue(comptime loc: Location, cpu: *Cpu) u8 {
         return switch (loc) {
             .a => cpu.regs._8.get(.a),
             .f => cpu.regs._8.get(.f),
@@ -67,7 +67,7 @@ pub const Mode = enum {
         };
     }
 
-    pub fn set(comptime loc: Mode, cpu: *Cpu, data: u8) void {
+    pub fn setValue(comptime loc: Location, cpu: *Cpu, data: u8) void {
         switch (loc) {
             .a => cpu.regs._8.set(.a, data),
             .b => cpu.regs._8.set(.b, data),
