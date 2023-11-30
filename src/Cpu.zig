@@ -33,6 +33,7 @@ pub fn execute(self: *Self) void {
         0x06 => self.ld(.b, .imm),
         0x07 => self.rotateA(.rlc),
         0x08 => self.ldAbsSp(),
+        0x09 => self.add16(.bc),
         0x0A => self.ld(.a, .addr_bc),
         0x0B => self.dec16(.bc),
         0x0C => self.inc(.c),
@@ -45,6 +46,7 @@ pub fn execute(self: *Self) void {
         0x14 => self.inc(.d),
         0x15 => self.dec(.d),
         0x17 => self.rotateA(.rl),
+        0x19 => self.add16(.de),
         0x1A => self.ld(.a, .addr_de),
         0x1B => self.dec16(.de),
         0x1C => self.inc(.e),
@@ -58,6 +60,7 @@ pub fn execute(self: *Self) void {
         0x24 => self.inc(.h),
         0x25 => self.dec(.h),
         0x26 => self.ld(.h, .imm),
+        0x29 => self.add16(.hl),
         0x2A => self.ld(.a, .addr_hli),
         0x2B => self.dec16(.hl),
         0x2C => self.inc(.l),
@@ -69,6 +72,7 @@ pub fn execute(self: *Self) void {
         0x34 => self.inc(.addr_hl),
         0x35 => self.dec(.addr_hl),
         0x36 => self.ld(.addr_hl, .imm),
+        0x39 => self.add16(.sp),
         0x3A => self.ld(.a, .addr_hld),
         0x3B => self.dec16(.sp),
         0x3C => self.inc(.a),
@@ -209,6 +213,7 @@ pub fn execute(self: *Self) void {
         0xE0 => self.ld(.zero_page, .a),
         0xE2 => self.ld(.zero_page_c, .a),
         0xE6 => self.bitAnd(.imm),
+        0xE8 => self.addSp(),
         0xEA => self.ld(.absolute, .a),
         0xEE => self.bitXor(.imm),
         0xF0 => self.ld(.a, .zero_page),
@@ -516,8 +521,8 @@ fn ldAbsSp(self: *Self) void {
 }
 
 fn ldHlSpImm(self: *Self) void {
-    const unsigned: i16 = @as(i8, @bitCast(self.read8()));
-    const offset: u16 = @bitCast(unsigned);
+    const signed: i16 = @as(i8, @bitCast(self.read8()));
+    const offset: u16 = @bitCast(signed);
     const sp = self.regs._16.get(.sp);
 
     self.regs._16.set(.hl, sp +% offset);
@@ -572,29 +577,72 @@ fn dec16(self: *Self, comptime reg: Reg16) void {
     self.bus.tick();
 }
 
-fn alu_add(self: *Self, value: u8, cy: u1) void {
-    const a: u16 = self.regs._8.get(.a);
-    const result: u16 = a + value + cy;
+fn addOverflow(comptime T: type, a: T, b: T, cy: u1) struct { T, u1 } {
+    const type_info = @typeInfo(T);
+    if (type_info != .Int) {
+        @compileError("expected integer type");
+    }
 
-    self.regs.f.c = result > 0xFF;
-    self.regs.f.h = (a & 0x0F) + (value & 0x0F) + cy > 0x0F;
+    const x = @addWithOverflow(a, b);
+    const result = @addWithOverflow(x[0], cy);
+
+    return .{ result[0], result[1] | x[1] };
+}
+
+fn aluAdd(self: *Self, value: u8, cy: u1) void {
+    const a = self.regs._8.get(.a);
+    const result = addOverflow(u8, a, value, cy);
+
+    self.regs.f.c = result[1] != 0;
+    self.regs.f.h = addOverflow(u4, @truncate(a), @truncate(value), cy)[1] != 0;
     self.regs.f.n = false;
-    self.regs.f.z = result & 0xFF == 0;
+    self.regs.f.z = result[0] & 0xFF == 0;
 
-    self.regs._8.set(.a, @truncate(result));
+    self.regs._8.set(.a, result[0]);
 }
 
 fn add(self: *Self, comptime loc: Location) void {
     const value = loc.getValue(self);
-    self.alu_add(value, 0);
+    self.aluAdd(value, 0);
 }
 
 fn adc(self: *Self, comptime loc: Location) void {
     const value = loc.getValue(self);
-    self.alu_add(value, @intFromBool(self.regs.f.c));
+    self.aluAdd(value, @intFromBool(self.regs.f.c));
 }
 
-fn alu_sub(self: *Self, value: u8, cy: u1) u8 {
+fn addSp(self: *Self) void {
+    const signed: i16 = @as(i8, @bitCast(self.read8()));
+    const value: u16 = @bitCast(signed);
+    const sp = self.regs._16.get(.sp);
+
+    self.regs.f.c = addOverflow(u8, @truncate(sp), @truncate(value), 0)[1] != 0;
+    self.regs.f.h = addOverflow(u4, @truncate(sp), @truncate(value), 0)[1] != 0;
+    self.regs.f.n = false;
+    self.regs.f.z = false;
+
+    self.regs._16.set(.sp, sp +% value);
+
+    self.bus.tick();
+    self.bus.tick();
+}
+
+fn add16(self: *Self, comptime reg: Reg16) void {
+    const value = self.regs._16.get(reg);
+    const hl = self.regs._16.get(.hl);
+    const result = addOverflow(u16, hl, value, 0);
+
+    self.regs.f.c = result[1] != 0;
+    self.regs.f.h = addOverflow(u12, @truncate(hl), @truncate(value), 0)[1] != 0;
+    self.regs.f.n = false;
+    self.regs.f.z = result[0] == 0;
+
+    self.regs._16.set(.hl, result[0]);
+
+    self.bus.tick();
+}
+
+fn aluSub(self: *Self, value: u8, cy: u1) u8 {
     const a = self.regs._8.get(.a);
     const result = a -% value -% cy;
 
@@ -608,13 +656,13 @@ fn alu_sub(self: *Self, value: u8, cy: u1) u8 {
 
 fn sub(self: *Self, comptime loc: Location) void {
     const value = loc.getValue(self);
-    const result = self.alu_sub(value, 0);
+    const result = self.aluSub(value, 0);
     self.regs._8.set(.a, result);
 }
 
 fn sbc(self: *Self, comptime loc: Location) void {
     const value = loc.getValue(self);
-    const result = self.alu_sub(value, @intFromBool(self.regs.f.c));
+    const result = self.aluSub(value, @intFromBool(self.regs.f.c));
     self.regs._8.set(.a, result);
 }
 
@@ -656,7 +704,7 @@ fn bitOr(self: *Self, comptime loc: Location) void {
 
 fn cp(self: *Self, comptime loc: Location) void {
     const value = loc.getValue(self);
-    _ = self.alu_sub(value, 0);
+    _ = self.aluSub(value, 0);
 }
 
 fn aluRotateRight(self: *Self, value: u8, cy: u1) u8 {
