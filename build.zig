@@ -27,7 +27,7 @@ pub fn build(b: *std.Build) !void {
 
             lib.addIncludePath(.{ .cwd_relative = emsdk_inc });
 
-            // Add SDL2 headers fo emcc
+            // Add SDL2 headers for emcc
             lib.installLibraryHeaders(sdl2);
 
             // create cached static lib to link with emcc
@@ -42,8 +42,11 @@ pub fn build(b: *std.Build) !void {
 
             // emcc link command
             const emcc_output = b.pathJoin(&.{ wasm_dir, "retrobyte.html" });
-            const emcc = b.addSystemCommand(&.{ "emcc", "-s", "USE_SDL=2", "-s", "STACK_SIZE=1048576", "-o", emcc_output });
+            const emcc = b.addSystemCommand(&.{"emcc"});
             emcc.addFileArg(lib_bin);
+            emcc.addArgs(&.{ "-s", "USE_SDL=2" });
+            emcc.addArgs(&.{ "-s", "STACK_SIZE=1048576" }); // 1MB stack size
+            emcc.addArgs(&.{ "-o", emcc_output });
 
             b.getInstallStep().dependOn(&emcc.step);
 
