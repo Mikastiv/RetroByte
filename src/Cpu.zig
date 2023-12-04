@@ -544,8 +544,9 @@ fn jump(self: *Self, addr: u16) void {
 }
 
 fn jumpRelative(self: *Self, offset: i8) void {
-    const addr: u16 = @bitCast(@as(i16, offset));
-    self.jump(addr);
+    const offset16: u16 = @bitCast(@as(i16, offset));
+    const pc = self.regs._16.get(.pc);
+    self.jump(pc +% offset16);
 }
 
 fn nop(_: *Self) void {}
