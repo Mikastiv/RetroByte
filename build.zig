@@ -5,6 +5,12 @@ pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const sdl2_dep = b.dependency("SDL2", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const sdl2 = sdl2_dep.artifact("SDL2");
+
     switch (target.getOsTag()) {
         .emscripten => {
             // get emscripten sdk path
@@ -20,7 +26,9 @@ pub fn build(b: *std.Build) !void {
             });
 
             lib.addIncludePath(.{ .cwd_relative = emsdk_inc });
-            lib.addIncludePath(.{ .path = "include" });
+
+            // Add SDL2 headers fo emcc
+            lib.installLibraryHeaders(sdl2);
 
             // create cached static lib to link with emcc
             const wf = b.addWriteFiles();
@@ -53,11 +61,6 @@ pub fn build(b: *std.Build) !void {
                 .optimize = optimize,
             });
 
-            const sdl2_dep = b.dependency("SDL2", .{
-                .target = target,
-                .optimize = optimize,
-            });
-            const sdl2 = sdl2_dep.artifact("SDL2");
             exe.linkLibrary(sdl2);
 
             b.installArtifact(exe);
