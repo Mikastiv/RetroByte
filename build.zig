@@ -34,7 +34,7 @@ pub fn build(b: *std.Build) !void {
 
             // emcc link command
             const emcc_output = b.pathJoin(&.{ wasm_dir, "retrobyte.html" });
-            const emcc = b.addSystemCommand(&.{ "emcc", "-s", "USE_SDL=2", "-o", emcc_output });
+            const emcc = b.addSystemCommand(&.{ "emcc", "-s", "USE_SDL=2", "-s", "STACK_SIZE=1048576", "-o", emcc_output });
             emcc.addFileArg(lib_bin);
 
             b.getInstallStep().dependOn(&emcc.step);
