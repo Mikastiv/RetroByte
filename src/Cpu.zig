@@ -6,10 +6,12 @@ const Location = @import("cpu/location.zig").Location;
 const expect = std.testing.expect;
 
 const Registers = registers.Registers;
+const Flags = registers.Flags;
 const Reg16 = registers.Reg16;
 const Reg8 = registers.Reg8;
 
 const RotateOp = enum { rl, rlc, rr, rrc };
+const JumpCond = enum { c, z, nc, nz, always };
 
 regs: Registers,
 bus: *Bus,
@@ -46,6 +48,7 @@ pub fn execute(self: *Self) void {
         0x14 => self.inc(.d),
         0x15 => self.dec(.d),
         0x17 => self.rotateA(.rl),
+        0x18 => self.jr(.always),
         0x19 => self.add16(.de),
         0x1A => self.ld(.a, .addr_de),
         0x1B => self.dec16(.de),
@@ -54,30 +57,37 @@ pub fn execute(self: *Self) void {
         0x1E => self.ld(.e, .imm),
         0x1F => self.rotateA(.rr),
         0x16 => self.ld(.d, .imm),
+        0x20 => self.jr(.nz),
         0x21 => self.ld16(.hl),
         0x22 => self.ld(.addr_hli, .a),
         0x23 => self.inc16(.hl),
         0x24 => self.inc(.h),
         0x25 => self.dec(.h),
         0x26 => self.ld(.h, .imm),
+        0x27 => self.cpl(),
+        0x28 => self.jr(.z),
         0x29 => self.add16(.hl),
         0x2A => self.ld(.a, .addr_hli),
         0x2B => self.dec16(.hl),
         0x2C => self.inc(.l),
         0x2D => self.dec(.l),
         0x2E => self.ld(.l, .imm),
+        0x30 => self.jr(.nc),
         0x31 => self.ld16(.sp),
         0x32 => self.ld(.addr_hld, .a),
         0x33 => self.inc16(.sp),
         0x34 => self.inc(.addr_hl),
         0x35 => self.dec(.addr_hl),
         0x36 => self.ld(.addr_hl, .imm),
+        0x37 => self.scf(),
+        0x38 => self.jr(.c),
         0x39 => self.add16(.sp),
         0x3A => self.ld(.a, .addr_hld),
         0x3B => self.dec16(.sp),
         0x3C => self.inc(.a),
         0x3D => self.dec(.a),
         0x3E => self.ld(.a, .imm),
+        0x3F => self.ccf(),
         0x40 => self.ld(.b, .b),
         0x41 => self.ld(.b, .c),
         0x42 => self.ld(.b, .d),
@@ -205,23 +215,40 @@ pub fn execute(self: *Self) void {
         0xBD => self.cp(.l),
         0xBE => self.cp(.addr_hl),
         0xBF => self.cp(.a),
+        0xC2 => self.jp(.nz),
+        0xC3 => self.jp(.always),
         0xC6 => self.add(.imm),
+        0xCA => self.jp(.z),
         0xCB => self.prefixCb(),
         0xCE => self.adc(.imm),
+        0xD2 => self.jp(.nc),
+        0xD3 => self.panic(),
         0xD6 => self.sub(.imm),
+        0xDA => self.jp(.c),
+        0xDB => self.panic(),
+        0xDD => self.panic(),
         0xDE => self.sbc(.imm),
         0xE0 => self.ld(.zero_page, .a),
         0xE2 => self.ld(.zero_page_c, .a),
+        0xE3 => self.panic(),
+        0xE4 => self.panic(),
         0xE6 => self.bitAnd(.imm),
         0xE8 => self.addSp(),
+        0xE9 => self.jpHl(),
         0xEA => self.ld(.absolute, .a),
+        0xEB => self.panic(),
+        0xEC => self.panic(),
+        0xED => self.panic(),
         0xEE => self.bitXor(.imm),
         0xF0 => self.ld(.a, .zero_page),
         0xF2 => self.ld(.a, .zero_page_c),
+        0xF4 => self.panic(),
         0xF6 => self.bitOr(.imm),
         0xF8 => self.ldHlSpImm(),
         0xF9 => self.ldSpHl(),
         0xFA => self.ld(.a, .absolute),
+        0xFC => self.panic(),
+        0xFD => self.panic(),
         0xFE => self.cp(.imm),
         else => {},
     }
@@ -501,7 +528,31 @@ pub fn read16(self: *Self) u16 {
     return hi << 8 | lo;
 }
 
+fn shouldJump(flags: Flags, comptime cond: JumpCond) bool {
+    return switch (cond) {
+        .c => flags.c,
+        .z => flags.z,
+        .nc => !flags.c,
+        .nz => !flags.z,
+        .always => true,
+    };
+}
+
+fn jump(self: *Self, addr: u16) void {
+    self.regs._16.set(.pc, addr);
+    self.bus.tick();
+}
+
+fn jumpRelative(self: *Self, offset: i8) void {
+    const addr: u16 = @bitCast(@as(i16, offset));
+    self.jump(addr);
+}
+
 fn nop(_: *Self) void {}
+
+fn panic(_: *Self) noreturn {
+    @panic("illegal instruction");
+}
 
 fn ld(self: *Self, comptime dst: Location, comptime src: Location) void {
     const value = src.getValue(self);
@@ -705,6 +756,45 @@ fn bitOr(self: *Self, comptime loc: Location) void {
 fn cp(self: *Self, comptime loc: Location) void {
     const value = loc.getValue(self);
     _ = self.aluSub(value, 0);
+}
+
+fn jr(self: *Self, comptime cond: JumpCond) void {
+    const offset: i8 = @bitCast(self.read8());
+    if (shouldJump(self.regs.f, cond)) {
+        self.jumpRelative(offset);
+    }
+}
+
+fn jp(self: *Self, comptime cond: JumpCond) void {
+    const addr = self.read16();
+    if (shouldJump(self.regs.f, cond)) {
+        self.jump(addr);
+    }
+}
+
+fn jpHl(self: *Self) void {
+    const hl = self.regs._16.get(.hl);
+    self.regs._16.set(.pc, hl);
+}
+
+fn scf(self: *Self) void {
+    self.regs.f.c = true;
+    self.regs.f.h = false;
+    self.regs.f.n = false;
+}
+
+fn cpl(self: *Self) void {
+    const a = self.regs._8.get(.a);
+    self.regs._8.set(.a, ~a);
+
+    self.regs.f.h = true;
+    self.regs.f.n = true;
+}
+
+fn ccf(self: *Self) void {
+    self.regs.f.c = !self.regs.f.c;
+    self.regs.f.h = false;
+    self.regs.f.n = false;
 }
 
 fn aluRotateRight(self: *Self, value: u8, cy: u1) u8 {
