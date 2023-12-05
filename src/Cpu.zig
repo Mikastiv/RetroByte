@@ -15,6 +15,9 @@ const JumpCond = enum { c, z, nc, nz, always };
 
 regs: Registers,
 bus: *Bus,
+halted: bool = false,
+ime: bool = false,
+enabling_ime: bool = false,
 
 pub fn init(bus: *Bus) Self {
     return .{
@@ -42,11 +45,13 @@ pub fn execute(self: *Self) void {
         0x0D => self.dec(.c),
         0x0E => self.ld(.c, .imm),
         0x0F => self.rotateA(.rrc),
+        0x10 => self.stop(),
         0x11 => self.ld16(.de),
         0x12 => self.ld(.addr_de, .a),
         0x13 => self.inc16(.de),
         0x14 => self.inc(.d),
         0x15 => self.dec(.d),
+        0x16 => self.ld(.d, .imm),
         0x17 => self.rotateA(.rl),
         0x18 => self.jr(.always),
         0x19 => self.add16(.de),
@@ -56,7 +61,6 @@ pub fn execute(self: *Self) void {
         0x1D => self.dec(.e),
         0x1E => self.ld(.e, .imm),
         0x1F => self.rotateA(.rr),
-        0x16 => self.ld(.d, .imm),
         0x20 => self.jr(.nz),
         0x21 => self.ld16(.hl),
         0x22 => self.ld(.addr_hli, .a),
@@ -143,6 +147,7 @@ pub fn execute(self: *Self) void {
         0x73 => self.ld(.addr_hl, .e),
         0x74 => self.ld(.addr_hl, .h),
         0x75 => self.ld(.addr_hl, .l),
+        0x76 => self.halt(),
         0x77 => self.ld(.addr_hl, .a),
         0x78 => self.ld(.a, .b),
         0x79 => self.ld(.a, .c),
@@ -241,6 +246,7 @@ pub fn execute(self: *Self) void {
         0xD6 => self.sub(.imm),
         0xD7 => self.rst(0x10),
         0xD8 => self.ret(.c),
+        0xD9 => self.reti(),
         0xDA => self.jp(.c),
         0xDB => self.panic(),
         0xDC => self.call(.c),
@@ -266,6 +272,7 @@ pub fn execute(self: *Self) void {
         0xF0 => self.ld(.a, .zero_page),
         0xF1 => self.pop(.af),
         0xF2 => self.ld(.a, .zero_page_c),
+        0xF3 => self.di(),
         0xF4 => self.panic(),
         0xF5 => self.push(.af),
         0xF6 => self.bitOr(.imm),
@@ -273,11 +280,11 @@ pub fn execute(self: *Self) void {
         0xF8 => self.ldHlSpImm(),
         0xF9 => self.ldSpHl(),
         0xFA => self.ld(.a, .absolute),
+        0xFB => self.ei(),
         0xFC => self.panic(),
         0xFD => self.panic(),
         0xFE => self.cp(.imm),
         0xFF => self.rst(0x38),
-        else => {},
     }
 }
 
@@ -897,9 +904,30 @@ fn ret(self: *Self, comptime cond: JumpCond) void {
     }
 }
 
+fn reti(self: *Self) void {
+    self.ime = true;
+    self.ret(.always);
+}
+
 fn rst(self: *Self, comptime addr: u8) void {
     self.stackPush(self.regs.pc());
     self.regs._16.set(.pc, addr);
+}
+
+fn stop(_: *Self) void {
+    @panic("stop instruction");
+}
+
+fn halt(self: *Self) void {
+    self.halted = true;
+}
+
+fn ei(self: *Self) void {
+    self.enabling_ime = true;
+}
+
+fn di(self: *Self) void {
+    self.ime = false;
 }
 
 fn aluRotateRight(self: *Self, value: u8, cy: u1) u8 {
