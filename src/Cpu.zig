@@ -222,6 +222,7 @@ pub fn execute(self: *Self) void {
         0xC4 => self.call(.nz),
         0xC5 => self.push(.bc),
         0xC6 => self.add(.imm),
+        0xC7 => self.rst(0x00),
         0xC8 => self.ret(.z),
         0xC9 => self.ret(.always),
         0xCA => self.jp(.z),
@@ -229,6 +230,7 @@ pub fn execute(self: *Self) void {
         0xCC => self.call(.z),
         0xCD => self.call(.always),
         0xCE => self.adc(.imm),
+        0xCF => self.rst(0x08),
         0xD0 => self.ret(.nc),
         0xD1 => self.pop(.de),
         0xD2 => self.jp(.nc),
@@ -236,12 +238,14 @@ pub fn execute(self: *Self) void {
         0xD4 => self.call(.nc),
         0xD5 => self.push(.de),
         0xD6 => self.sub(.imm),
+        0xD7 => self.rst(0x10),
         0xD8 => self.ret(.c),
         0xDA => self.jp(.c),
         0xDB => self.panic(),
         0xDC => self.call(.c),
         0xDD => self.panic(),
         0xDE => self.sbc(.imm),
+        0xDF => self.rst(0x18),
         0xE0 => self.ld(.zero_page, .a),
         0xE1 => self.pop(.hl),
         0xE2 => self.ld(.zero_page_c, .a),
@@ -249,6 +253,7 @@ pub fn execute(self: *Self) void {
         0xE4 => self.panic(),
         0xE5 => self.push(.hl),
         0xE6 => self.bitAnd(.imm),
+        0xE7 => self.rst(0x20),
         0xE8 => self.addSp(),
         0xE9 => self.jpHl(),
         0xEA => self.ld(.absolute, .a),
@@ -256,18 +261,21 @@ pub fn execute(self: *Self) void {
         0xEC => self.panic(),
         0xED => self.panic(),
         0xEE => self.bitXor(.imm),
+        0xEF => self.rst(0x28),
         0xF0 => self.ld(.a, .zero_page),
         0xF1 => self.pop(.af),
         0xF2 => self.ld(.a, .zero_page_c),
         0xF4 => self.panic(),
         0xF5 => self.push(.af),
         0xF6 => self.bitOr(.imm),
+        0xF7 => self.rst(0x30),
         0xF8 => self.ldHlSpImm(),
         0xF9 => self.ldSpHl(),
         0xFA => self.ld(.a, .absolute),
         0xFC => self.panic(),
         0xFD => self.panic(),
         0xFE => self.cp(.imm),
+        0xFF => self.rst(0x38),
         else => {},
     }
 }
@@ -864,6 +872,11 @@ fn ret(self: *Self, comptime cond: JumpCond) void {
         const addr = self.stackPop();
         self.jump(addr);
     }
+}
+
+fn rst(self: *Self, comptime addr: u8) void {
+    self.stackPush(self.regs.pc());
+    self.regs._16.set(.pc, addr);
 }
 
 fn aluRotateRight(self: *Self, value: u8, cy: u1) u8 {
