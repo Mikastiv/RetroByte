@@ -18,6 +18,7 @@ bus: *Bus,
 halted: bool = false,
 ime: bool = false,
 enabling_ime: bool = false,
+curr_opcode: u8 = 0x00,
 
 pub fn init(bus: *Bus) Self {
     return .{
@@ -26,8 +27,524 @@ pub fn init(bus: *Bus) Self {
     };
 }
 
-pub fn execute(self: *Self) void {
+pub fn step(self: *Self) void {
+    if (self.curr_opcode == 0xF3) { // if previous instruction was di
+        self.curr_opcode = self.read8();
+        self.execute(self.curr_opcode);
+        return;
+    }
+
+    if (self.halted) {}
+
+    if (self.ime) {
+        self.enabling_ime = false;
+    }
+
+    if (self.enabling_ime) {
+        self.ime = true;
+    }
+
     const opcode: u8 = self.read8();
+    _ = opcode;
+}
+
+pub fn read8(self: *Self) u8 {
+    const byte: u8 = self.bus.read(self.regs.pc());
+    self.regs.incPc();
+    return byte;
+}
+
+pub fn read16(self: *Self) u16 {
+    const lo: u16 = self.read8();
+    const hi: u16 = self.read8();
+    return hi << 8 | lo;
+}
+
+fn shouldJump(flags: Flags, comptime cond: JumpCond) bool {
+    return switch (cond) {
+        .c => flags.c,
+        .z => flags.z,
+        .nc => !flags.c,
+        .nz => !flags.z,
+        .always => true,
+    };
+}
+
+fn jump(self: *Self, addr: u16) void {
+    self.regs._16.set(.pc, addr);
+    self.bus.tick();
+}
+
+fn jumpRelative(self: *Self, offset: i8) void {
+    const offset16: u16 = @bitCast(@as(i16, offset));
+    const pc = self.regs.pc();
+    self.jump(pc +% offset16);
+}
+
+fn stackPush(self: *Self, value: u16) void {
+    self.bus.tick();
+
+    const hi: u8 = @intCast(value >> 8);
+    const lo: u8 = @truncate(value);
+
+    self.regs.decSp();
+    self.bus.write(self.regs.sp(), hi);
+    self.regs.decSp();
+    self.bus.write(self.regs.sp(), lo);
+}
+
+fn stackPop(self: *Self) u16 {
+    const lo: u16 = self.bus.read(self.regs.sp());
+    self.regs.incSp();
+    const hi: u16 = self.bus.read(self.regs.sp());
+    self.regs.incSp();
+
+    return hi << 8 | lo;
+}
+
+fn nop(_: *Self) void {}
+
+fn panic(_: *Self) noreturn {
+    @panic("illegal instruction");
+}
+
+fn ld(self: *Self, comptime dst: Location, comptime src: Location) void {
+    const value = src.getValue(self);
+    dst.setValue(self, value);
+}
+
+fn ld16(self: *Self, comptime reg: Reg16) void {
+    const value = self.read16();
+    self.regs._16.set(reg, value);
+}
+
+fn ldAbsSp(self: *Self) void {
+    const addr = self.read16();
+    const sp = self.regs.sp();
+    self.bus.write(addr, @truncate(sp));
+    self.bus.write(addr +% 1, @intCast(sp >> 8));
+}
+
+fn ldHlSpImm(self: *Self) void {
+    const signed: i16 = @as(i8, @bitCast(self.read8()));
+    const offset: u16 = @bitCast(signed);
+    const sp = self.regs.sp();
+
+    self.regs._16.set(.hl, sp +% offset);
+
+    const carry = (sp & 0xFF) + (offset & 0xFF) > 0xFF;
+    const half = (sp & 0xF) + (offset & 0xF) > 0xF;
+    self.regs.f.c = carry;
+    self.regs.f.h = half;
+    self.regs.f.n = false;
+    self.regs.f.z = false;
+
+    self.bus.tick();
+}
+
+fn ldSpHl(self: *Self) void {
+    const hl = self.regs._16.get(.hl);
+    self.regs._16.set(.sp, hl);
+    self.bus.tick();
+}
+
+fn inc(self: *Self, comptime loc: Location) void {
+    const value = loc.getValue(self);
+    const new_value = value +% 1;
+
+    self.regs.f.h = value & 0x0F == 0x0F;
+    self.regs.f.n = false;
+    self.regs.f.z = new_value == 0;
+
+    loc.setValue(self, new_value);
+}
+
+fn inc16(self: *Self, comptime reg: Reg16) void {
+    const value = self.regs._16.get(reg);
+    self.regs._16.set(reg, value +% 1);
+    self.bus.tick();
+}
+
+fn dec(self: *Self, comptime loc: Location) void {
+    const value = loc.getValue(self);
+    const new_value = value -% 1;
+
+    self.regs.f.h = value & 0x0F == 0x00;
+    self.regs.f.n = true;
+    self.regs.f.z = new_value == 0;
+
+    loc.setValue(self, new_value);
+}
+
+fn dec16(self: *Self, comptime reg: Reg16) void {
+    const value = self.regs._16.get(reg);
+    self.regs._16.set(reg, value -% 1);
+    self.bus.tick();
+}
+
+fn addOverflow(comptime T: type, a: T, b: T, cy: u1) struct { T, u1 } {
+    const type_info = @typeInfo(T);
+    if (type_info != .Int) {
+        @compileError("expected integer type");
+    }
+
+    const x = @addWithOverflow(a, b);
+    const result = @addWithOverflow(x[0], cy);
+
+    return .{ result[0], result[1] | x[1] };
+}
+
+fn aluAdd(self: *Self, value: u8, cy: u1) void {
+    const a = self.regs._8.get(.a);
+    const result = addOverflow(u8, a, value, cy);
+
+    self.regs.f.c = result[1] != 0;
+    self.regs.f.h = addOverflow(u4, @truncate(a), @truncate(value), cy)[1] != 0;
+    self.regs.f.n = false;
+    self.regs.f.z = result[0] & 0xFF == 0;
+
+    self.regs._8.set(.a, result[0]);
+}
+
+fn add(self: *Self, comptime loc: Location) void {
+    const value = loc.getValue(self);
+    self.aluAdd(value, 0);
+}
+
+fn adc(self: *Self, comptime loc: Location) void {
+    const value = loc.getValue(self);
+    self.aluAdd(value, @intFromBool(self.regs.f.c));
+}
+
+fn addSp(self: *Self) void {
+    const signed: i16 = @as(i8, @bitCast(self.read8()));
+    const value: u16 = @bitCast(signed);
+    const sp = self.regs.sp();
+
+    self.regs.f.c = addOverflow(u8, @truncate(sp), @truncate(value), 0)[1] != 0;
+    self.regs.f.h = addOverflow(u4, @truncate(sp), @truncate(value), 0)[1] != 0;
+    self.regs.f.n = false;
+    self.regs.f.z = false;
+
+    self.regs._16.set(.sp, sp +% value);
+
+    self.bus.tick();
+    self.bus.tick();
+}
+
+fn add16(self: *Self, comptime reg: Reg16) void {
+    const value = self.regs._16.get(reg);
+    const hl = self.regs._16.get(.hl);
+    const result = addOverflow(u16, hl, value, 0);
+
+    self.regs.f.c = result[1] != 0;
+    self.regs.f.h = addOverflow(u12, @truncate(hl), @truncate(value), 0)[1] != 0;
+    self.regs.f.n = false;
+    self.regs.f.z = result[0] == 0;
+
+    self.regs._16.set(.hl, result[0]);
+
+    self.bus.tick();
+}
+
+fn aluSub(self: *Self, value: u8, cy: u1) u8 {
+    const a = self.regs._8.get(.a);
+    const result = a -% value -% cy;
+
+    self.regs.f.c = @as(u16, a) < @as(u16, value) + cy;
+    self.regs.f.h = (a & 0x0F) < (value & 0x0F) + cy;
+    self.regs.f.n = true;
+    self.regs.f.z = result == 0;
+
+    return result;
+}
+
+fn sub(self: *Self, comptime loc: Location) void {
+    const value = loc.getValue(self);
+    const result = self.aluSub(value, 0);
+    self.regs._8.set(.a, result);
+}
+
+fn sbc(self: *Self, comptime loc: Location) void {
+    const value = loc.getValue(self);
+    const result = self.aluSub(value, @intFromBool(self.regs.f.c));
+    self.regs._8.set(.a, result);
+}
+
+fn bitAnd(self: *Self, comptime loc: Location) void {
+    const value = loc.getValue(self);
+    const result = self.regs._8.get(.a) & value;
+
+    self.regs.f.c = false;
+    self.regs.f.h = true;
+    self.regs.f.n = false;
+    self.regs.f.z = result == 0;
+
+    self.regs._8.set(.a, result);
+}
+
+fn bitXor(self: *Self, comptime loc: Location) void {
+    const value = loc.getValue(self);
+    const result = self.regs._8.get(.a) ^ value;
+
+    self.regs.f.c = false;
+    self.regs.f.h = false;
+    self.regs.f.n = false;
+    self.regs.f.z = result == 0;
+
+    self.regs._8.set(.a, result);
+}
+
+fn bitOr(self: *Self, comptime loc: Location) void {
+    const value = loc.getValue(self);
+    const result = self.regs._8.get(.a) | value;
+
+    self.regs.f.c = false;
+    self.regs.f.h = false;
+    self.regs.f.n = false;
+    self.regs.f.z = result == 0;
+
+    self.regs._8.set(.a, result);
+}
+
+fn cp(self: *Self, comptime loc: Location) void {
+    const value = loc.getValue(self);
+    _ = self.aluSub(value, 0);
+}
+
+fn jr(self: *Self, comptime cond: JumpCond) void {
+    const offset: i8 = @bitCast(self.read8());
+    if (shouldJump(self.regs.f, cond)) {
+        self.jumpRelative(offset);
+    }
+}
+
+fn jp(self: *Self, comptime cond: JumpCond) void {
+    const addr = self.read16();
+    if (shouldJump(self.regs.f, cond)) {
+        self.jump(addr);
+    }
+}
+
+fn jpHl(self: *Self) void {
+    const hl = self.regs._16.get(.hl);
+    self.regs._16.set(.pc, hl);
+}
+
+fn daa(self: *Self) void {
+    var a = self.regs._8.get(.a);
+
+    const c = self.regs.f.c;
+    const n = self.regs.f.n;
+    const h = self.regs.f.h;
+
+    if (!n) { // after addition
+        if (c or a > 0x99) a +%= 0x60;
+        if (h or (a & 0x0F) > 0x09) a +%= 0x06;
+    } else { // after substraction
+        if (c) a -%= 0x60;
+        if (h) a -%= 0x06;
+    }
+
+    self.regs._8.set(.a, a);
+
+    self.regs.f.c = !n and (c or a > 0x99);
+    self.regs.f.z = a == 0;
+    self.regs.f.h = false;
+}
+
+fn scf(self: *Self) void {
+    self.regs.f.c = true;
+    self.regs.f.h = false;
+    self.regs.f.n = false;
+}
+
+fn cpl(self: *Self) void {
+    const a = self.regs._8.get(.a);
+    self.regs._8.set(.a, ~a);
+
+    self.regs.f.h = true;
+    self.regs.f.n = true;
+}
+
+fn ccf(self: *Self) void {
+    self.regs.f.c = !self.regs.f.c;
+    self.regs.f.h = false;
+    self.regs.f.n = false;
+}
+
+fn push(self: *Self, comptime reg: Reg16) void {
+    const value = self.regs._16.get(reg);
+    self.stackPush(value);
+}
+
+fn pop(self: *Self, comptime reg: Reg16) void {
+    const value = self.stackPop();
+    self.regs._16.set(reg, value);
+
+    // Clear unused flags bits; they didn't exist on real hardware
+    if (reg == .af) self.regs.f._unused = 0;
+}
+
+fn call(self: *Self, comptime cond: JumpCond) void {
+    const addr = self.read16();
+    if (shouldJump(self.regs.f, cond)) {
+        self.stackPush(self.regs.pc());
+        self.regs._16.set(.pc, addr);
+    }
+}
+
+fn ret(self: *Self, comptime cond: JumpCond) void {
+    if (cond != .always) self.bus.tick();
+    if (shouldJump(self.regs.f, cond)) {
+        const addr = self.stackPop();
+        self.jump(addr);
+    }
+}
+
+fn reti(self: *Self) void {
+    self.ime = true;
+    self.ret(.always);
+}
+
+fn rst(self: *Self, comptime addr: u8) void {
+    self.stackPush(self.regs.pc());
+    self.regs._16.set(.pc, addr);
+}
+
+fn stop(_: *Self) void {
+    @panic("stop instruction");
+}
+
+fn halt(self: *Self) void {
+    self.halted = true;
+}
+
+fn ei(self: *Self) void {
+    self.enabling_ime = true;
+}
+
+fn di(self: *Self) void {
+    self.ime = false;
+}
+
+fn aluRotateRight(self: *Self, value: u8, cy: u1) u8 {
+    const result = @as(u8, cy) << 7 | value >> 1;
+
+    self.regs.f.c = value & 0x01 != 0;
+    self.regs.f.h = false;
+    self.regs.f.n = false;
+    self.regs.f.z = result == 0;
+
+    return result;
+}
+
+fn aluRotateLeft(self: *Self, value: u8, cy: u1) u8 {
+    const result = value << 1 | cy;
+
+    self.regs.f.c = value & 0x80 != 0;
+    self.regs.f.h = false;
+    self.regs.f.n = false;
+    self.regs.f.z = result == 0;
+
+    return result;
+}
+
+fn rotateA(self: *Self, comptime op: RotateOp) void {
+    const value = self.regs._8.get(.a);
+    const result = switch (op) {
+        .rl => self.aluRotateLeft(value, @intFromBool(self.regs.f.c)),
+        .rlc => self.aluRotateLeft(value, @intCast(value >> 7)),
+        .rr => self.aluRotateRight(value, @intFromBool(self.regs.f.c)),
+        .rrc => self.aluRotateRight(value, @intCast(value & 0x01)),
+    };
+
+    self.regs.f.z = false;
+    self.regs._8.set(.a, result);
+}
+
+fn rotate(self: *Self, comptime loc: Location, comptime op: RotateOp) void {
+    const value = loc.getValue(self);
+    const result = switch (op) {
+        .rl => self.aluRotateLeft(value, @intFromBool(self.regs.f.c)),
+        .rlc => self.aluRotateLeft(value, @intCast(value >> 7)),
+        .rr => self.aluRotateRight(value, @intFromBool(self.regs.f.c)),
+        .rrc => self.aluRotateRight(value, @intCast(value & 0x01)),
+    };
+    loc.setValue(self, result);
+}
+
+fn sla(self: *Self, comptime loc: Location) void {
+    const value = loc.getValue(self);
+    const result = value << 1;
+
+    self.regs.f.c = value & 0x80 != 0;
+    self.regs.f.h = false;
+    self.regs.f.n = false;
+    self.regs.f.z = result == 0;
+
+    loc.setValue(self, result);
+}
+
+fn sra(self: *Self, comptime loc: Location) void {
+    const value = loc.getValue(self);
+    const hi = value & 0x80;
+    const result = hi | value >> 1;
+
+    self.regs.f.c = value & 0x01 != 0;
+    self.regs.f.h = false;
+    self.regs.f.n = false;
+    self.regs.f.z = result == 0;
+
+    loc.setValue(self, result);
+}
+
+fn srl(self: *Self, comptime loc: Location) void {
+    const value = loc.getValue(self);
+    const result = value >> 1;
+
+    self.regs.f.c = value & 0x01 != 0;
+    self.regs.f.h = false;
+    self.regs.f.n = false;
+    self.regs.f.z = result == 0;
+
+    loc.setValue(self, result);
+}
+
+fn swap(self: *Self, comptime loc: Location) void {
+    const value = loc.getValue(self);
+    const result = value >> 4 | value << 4;
+
+    self.regs.f.c = false;
+    self.regs.f.h = false;
+    self.regs.f.n = false;
+    self.regs.f.z = result == 0;
+
+    loc.setValue(self, result);
+}
+
+fn bit(self: *Self, comptime loc: Location, comptime n: u3) void {
+    const value = loc.getValue(self);
+    const result = value & (1 << n);
+
+    self.regs.f.h = true;
+    self.regs.f.n = false;
+    self.regs.f.z = result == 0;
+}
+
+fn set(self: *Self, comptime loc: Location, comptime n: u3) void {
+    const value = loc.getValue(self);
+    const result = value | 1 << n;
+    loc.setValue(self, result);
+}
+
+fn res(self: *Self, comptime loc: Location, comptime n: u3) void {
+    const value = loc.getValue(self);
+    const result = value & ~@as(u8, 1 << n);
+    loc.setValue(self, result);
+}
+
+pub fn execute(self: *Self, opcode: u8) void {
     switch (opcode) {
         0x00 => self.nop(),
         0x01 => self.ld16(.bc),
@@ -548,502 +1065,6 @@ fn prefixCb(self: *Self) void {
         0xFE => self.set(.addr_hl, 7),
         0xFF => self.set(.a, 7),
     }
-}
-
-pub fn read8(self: *Self) u8 {
-    const byte: u8 = self.bus.read(self.regs.pc());
-    self.regs.incPc();
-    return byte;
-}
-
-pub fn read16(self: *Self) u16 {
-    const lo: u16 = self.read8();
-    const hi: u16 = self.read8();
-    return hi << 8 | lo;
-}
-
-fn shouldJump(flags: Flags, comptime cond: JumpCond) bool {
-    return switch (cond) {
-        .c => flags.c,
-        .z => flags.z,
-        .nc => !flags.c,
-        .nz => !flags.z,
-        .always => true,
-    };
-}
-
-fn jump(self: *Self, addr: u16) void {
-    self.regs._16.set(.pc, addr);
-    self.bus.tick();
-}
-
-fn jumpRelative(self: *Self, offset: i8) void {
-    const offset16: u16 = @bitCast(@as(i16, offset));
-    const pc = self.regs.pc();
-    self.jump(pc +% offset16);
-}
-
-fn stackPush(self: *Self, value: u16) void {
-    self.bus.tick();
-
-    const hi: u8 = @intCast(value >> 8);
-    const lo: u8 = @truncate(value);
-
-    self.regs.decSp();
-    self.bus.write(self.regs.sp(), hi);
-    self.regs.decSp();
-    self.bus.write(self.regs.sp(), lo);
-}
-
-fn stackPop(self: *Self) u16 {
-    const lo: u16 = self.bus.read(self.regs.sp());
-    self.regs.incSp();
-    const hi: u16 = self.bus.read(self.regs.sp());
-    self.regs.incSp();
-
-    return hi << 8 | lo;
-}
-
-fn nop(_: *Self) void {}
-
-fn panic(_: *Self) noreturn {
-    @panic("illegal instruction");
-}
-
-fn ld(self: *Self, comptime dst: Location, comptime src: Location) void {
-    const value = src.getValue(self);
-    dst.setValue(self, value);
-}
-
-fn ld16(self: *Self, comptime reg: Reg16) void {
-    const value = self.read16();
-    self.regs._16.set(reg, value);
-}
-
-fn ldAbsSp(self: *Self) void {
-    const addr = self.read16();
-    const sp = self.regs.sp();
-    self.bus.write(addr, @truncate(sp));
-    self.bus.write(addr +% 1, @intCast(sp >> 8));
-}
-
-fn ldHlSpImm(self: *Self) void {
-    const signed: i16 = @as(i8, @bitCast(self.read8()));
-    const offset: u16 = @bitCast(signed);
-    const sp = self.regs.sp();
-
-    self.regs._16.set(.hl, sp +% offset);
-
-    const carry = (sp & 0xFF) + (offset & 0xFF) > 0xFF;
-    const half = (sp & 0xF) + (offset & 0xF) > 0xF;
-    self.regs.f.c = carry;
-    self.regs.f.h = half;
-    self.regs.f.n = false;
-    self.regs.f.z = false;
-
-    self.bus.tick();
-}
-
-fn ldSpHl(self: *Self) void {
-    const hl = self.regs._16.get(.hl);
-    self.regs._16.set(.sp, hl);
-    self.bus.tick();
-}
-
-fn inc(self: *Self, comptime loc: Location) void {
-    const value = loc.getValue(self);
-    const new_value = value +% 1;
-
-    self.regs.f.h = value & 0x0F == 0x0F;
-    self.regs.f.n = false;
-    self.regs.f.z = new_value == 0;
-
-    loc.setValue(self, new_value);
-}
-
-fn inc16(self: *Self, comptime reg: Reg16) void {
-    const value = self.regs._16.get(reg);
-    self.regs._16.set(reg, value +% 1);
-    self.bus.tick();
-}
-
-fn dec(self: *Self, comptime loc: Location) void {
-    const value = loc.getValue(self);
-    const new_value = value -% 1;
-
-    self.regs.f.h = value & 0x0F == 0x00;
-    self.regs.f.n = true;
-    self.regs.f.z = new_value == 0;
-
-    loc.setValue(self, new_value);
-}
-
-fn dec16(self: *Self, comptime reg: Reg16) void {
-    const value = self.regs._16.get(reg);
-    self.regs._16.set(reg, value -% 1);
-    self.bus.tick();
-}
-
-fn addOverflow(comptime T: type, a: T, b: T, cy: u1) struct { T, u1 } {
-    const type_info = @typeInfo(T);
-    if (type_info != .Int) {
-        @compileError("expected integer type");
-    }
-
-    const x = @addWithOverflow(a, b);
-    const result = @addWithOverflow(x[0], cy);
-
-    return .{ result[0], result[1] | x[1] };
-}
-
-fn aluAdd(self: *Self, value: u8, cy: u1) void {
-    const a = self.regs._8.get(.a);
-    const result = addOverflow(u8, a, value, cy);
-
-    self.regs.f.c = result[1] != 0;
-    self.regs.f.h = addOverflow(u4, @truncate(a), @truncate(value), cy)[1] != 0;
-    self.regs.f.n = false;
-    self.regs.f.z = result[0] & 0xFF == 0;
-
-    self.regs._8.set(.a, result[0]);
-}
-
-fn add(self: *Self, comptime loc: Location) void {
-    const value = loc.getValue(self);
-    self.aluAdd(value, 0);
-}
-
-fn adc(self: *Self, comptime loc: Location) void {
-    const value = loc.getValue(self);
-    self.aluAdd(value, @intFromBool(self.regs.f.c));
-}
-
-fn addSp(self: *Self) void {
-    const signed: i16 = @as(i8, @bitCast(self.read8()));
-    const value: u16 = @bitCast(signed);
-    const sp = self.regs.sp();
-
-    self.regs.f.c = addOverflow(u8, @truncate(sp), @truncate(value), 0)[1] != 0;
-    self.regs.f.h = addOverflow(u4, @truncate(sp), @truncate(value), 0)[1] != 0;
-    self.regs.f.n = false;
-    self.regs.f.z = false;
-
-    self.regs._16.set(.sp, sp +% value);
-
-    self.bus.tick();
-    self.bus.tick();
-}
-
-fn add16(self: *Self, comptime reg: Reg16) void {
-    const value = self.regs._16.get(reg);
-    const hl = self.regs._16.get(.hl);
-    const result = addOverflow(u16, hl, value, 0);
-
-    self.regs.f.c = result[1] != 0;
-    self.regs.f.h = addOverflow(u12, @truncate(hl), @truncate(value), 0)[1] != 0;
-    self.regs.f.n = false;
-    self.regs.f.z = result[0] == 0;
-
-    self.regs._16.set(.hl, result[0]);
-
-    self.bus.tick();
-}
-
-fn aluSub(self: *Self, value: u8, cy: u1) u8 {
-    const a = self.regs._8.get(.a);
-    const result = a -% value -% cy;
-
-    self.regs.f.c = @as(u16, a) < @as(u16, value) + cy;
-    self.regs.f.h = (a & 0x0F) < (value & 0x0F) + cy;
-    self.regs.f.n = true;
-    self.regs.f.z = result == 0;
-
-    return result;
-}
-
-fn sub(self: *Self, comptime loc: Location) void {
-    const value = loc.getValue(self);
-    const result = self.aluSub(value, 0);
-    self.regs._8.set(.a, result);
-}
-
-fn sbc(self: *Self, comptime loc: Location) void {
-    const value = loc.getValue(self);
-    const result = self.aluSub(value, @intFromBool(self.regs.f.c));
-    self.regs._8.set(.a, result);
-}
-
-fn bitAnd(self: *Self, comptime loc: Location) void {
-    const value = loc.getValue(self);
-    const result = self.regs._8.get(.a) & value;
-
-    self.regs.f.c = false;
-    self.regs.f.h = true;
-    self.regs.f.n = false;
-    self.regs.f.z = result == 0;
-
-    self.regs._8.set(.a, result);
-}
-
-fn bitXor(self: *Self, comptime loc: Location) void {
-    const value = loc.getValue(self);
-    const result = self.regs._8.get(.a) ^ value;
-
-    self.regs.f.c = false;
-    self.regs.f.h = false;
-    self.regs.f.n = false;
-    self.regs.f.z = result == 0;
-
-    self.regs._8.set(.a, result);
-}
-
-fn bitOr(self: *Self, comptime loc: Location) void {
-    const value = loc.getValue(self);
-    const result = self.regs._8.get(.a) | value;
-
-    self.regs.f.c = false;
-    self.regs.f.h = false;
-    self.regs.f.n = false;
-    self.regs.f.z = result == 0;
-
-    self.regs._8.set(.a, result);
-}
-
-fn cp(self: *Self, comptime loc: Location) void {
-    const value = loc.getValue(self);
-    _ = self.aluSub(value, 0);
-}
-
-fn jr(self: *Self, comptime cond: JumpCond) void {
-    const offset: i8 = @bitCast(self.read8());
-    if (shouldJump(self.regs.f, cond)) {
-        self.jumpRelative(offset);
-    }
-}
-
-fn jp(self: *Self, comptime cond: JumpCond) void {
-    const addr = self.read16();
-    if (shouldJump(self.regs.f, cond)) {
-        self.jump(addr);
-    }
-}
-
-fn jpHl(self: *Self) void {
-    const hl = self.regs._16.get(.hl);
-    self.regs._16.set(.pc, hl);
-}
-
-fn daa(self: *Self) void {
-    var a = self.regs._8.get(.a);
-
-    const c = self.regs.f.c;
-    const n = self.regs.f.n;
-    const h = self.regs.f.h;
-
-    if (!n) { // after addition
-        if (c or a > 0x99) a +%= 0x60;
-        if (h or (a & 0x0F) > 0x09) a +%= 0x06;
-    } else { // after substraction
-        if (c) a -%= 0x60;
-        if (h) a -%= 0x06;
-    }
-
-    self.regs._8.set(.a, a);
-
-    self.regs.f.c = !n and (c or a > 0x99);
-    self.regs.f.z = a == 0;
-    self.regs.f.h = false;
-}
-
-fn scf(self: *Self) void {
-    self.regs.f.c = true;
-    self.regs.f.h = false;
-    self.regs.f.n = false;
-}
-
-fn cpl(self: *Self) void {
-    const a = self.regs._8.get(.a);
-    self.regs._8.set(.a, ~a);
-
-    self.regs.f.h = true;
-    self.regs.f.n = true;
-}
-
-fn ccf(self: *Self) void {
-    self.regs.f.c = !self.regs.f.c;
-    self.regs.f.h = false;
-    self.regs.f.n = false;
-}
-
-fn push(self: *Self, comptime reg: Reg16) void {
-    const value = self.regs._16.get(reg);
-    self.stackPush(value);
-}
-
-fn pop(self: *Self, comptime reg: Reg16) void {
-    const value = self.stackPop();
-    self.regs._16.set(reg, value);
-
-    // Clear unused flags bits; they didn't exist on real hardware
-    if (reg == .af) self.regs.f._unused = 0;
-}
-
-fn call(self: *Self, comptime cond: JumpCond) void {
-    const addr = self.read16();
-    if (shouldJump(self.regs.f, cond)) {
-        self.stackPush(self.regs.pc());
-        self.regs._16.set(.pc, addr);
-    }
-}
-
-fn ret(self: *Self, comptime cond: JumpCond) void {
-    if (cond != .always) self.bus.tick();
-    if (shouldJump(self.regs.f, cond)) {
-        const addr = self.stackPop();
-        self.jump(addr);
-    }
-}
-
-fn reti(self: *Self) void {
-    self.ime = true;
-    self.ret(.always);
-}
-
-fn rst(self: *Self, comptime addr: u8) void {
-    self.stackPush(self.regs.pc());
-    self.regs._16.set(.pc, addr);
-}
-
-fn stop(_: *Self) void {
-    @panic("stop instruction");
-}
-
-fn halt(self: *Self) void {
-    self.halted = true;
-}
-
-fn ei(self: *Self) void {
-    self.enabling_ime = true;
-}
-
-fn di(self: *Self) void {
-    self.ime = false;
-}
-
-fn aluRotateRight(self: *Self, value: u8, cy: u1) u8 {
-    const result = @as(u8, cy) << 7 | value >> 1;
-
-    self.regs.f.c = value & 0x01 != 0;
-    self.regs.f.h = false;
-    self.regs.f.n = false;
-    self.regs.f.z = result == 0;
-
-    return result;
-}
-
-fn aluRotateLeft(self: *Self, value: u8, cy: u1) u8 {
-    const result = value << 1 | cy;
-
-    self.regs.f.c = value & 0x80 != 0;
-    self.regs.f.h = false;
-    self.regs.f.n = false;
-    self.regs.f.z = result == 0;
-
-    return result;
-}
-
-fn rotateA(self: *Self, comptime op: RotateOp) void {
-    const value = self.regs._8.get(.a);
-    const result = switch (op) {
-        .rl => self.aluRotateLeft(value, @intFromBool(self.regs.f.c)),
-        .rlc => self.aluRotateLeft(value, @intCast(value >> 7)),
-        .rr => self.aluRotateRight(value, @intFromBool(self.regs.f.c)),
-        .rrc => self.aluRotateRight(value, @intCast(value & 0x01)),
-    };
-
-    self.regs.f.z = false;
-    self.regs._8.set(.a, result);
-}
-
-fn rotate(self: *Self, comptime loc: Location, comptime op: RotateOp) void {
-    const value = loc.getValue(self);
-    const result = switch (op) {
-        .rl => self.aluRotateLeft(value, @intFromBool(self.regs.f.c)),
-        .rlc => self.aluRotateLeft(value, @intCast(value >> 7)),
-        .rr => self.aluRotateRight(value, @intFromBool(self.regs.f.c)),
-        .rrc => self.aluRotateRight(value, @intCast(value & 0x01)),
-    };
-    loc.setValue(self, result);
-}
-
-fn sla(self: *Self, comptime loc: Location) void {
-    const value = loc.getValue(self);
-    const result = value << 1;
-
-    self.regs.f.c = value & 0x80 != 0;
-    self.regs.f.h = false;
-    self.regs.f.n = false;
-    self.regs.f.z = result == 0;
-
-    loc.setValue(self, result);
-}
-
-fn sra(self: *Self, comptime loc: Location) void {
-    const value = loc.getValue(self);
-    const hi = value & 0x80;
-    const result = hi | value >> 1;
-
-    self.regs.f.c = value & 0x01 != 0;
-    self.regs.f.h = false;
-    self.regs.f.n = false;
-    self.regs.f.z = result == 0;
-
-    loc.setValue(self, result);
-}
-
-fn srl(self: *Self, comptime loc: Location) void {
-    const value = loc.getValue(self);
-    const result = value >> 1;
-
-    self.regs.f.c = value & 0x01 != 0;
-    self.regs.f.h = false;
-    self.regs.f.n = false;
-    self.regs.f.z = result == 0;
-
-    loc.setValue(self, result);
-}
-
-fn swap(self: *Self, comptime loc: Location) void {
-    const value = loc.getValue(self);
-    const result = value >> 4 | value << 4;
-
-    self.regs.f.c = false;
-    self.regs.f.h = false;
-    self.regs.f.n = false;
-    self.regs.f.z = result == 0;
-
-    loc.setValue(self, result);
-}
-
-fn bit(self: *Self, comptime loc: Location, comptime n: u3) void {
-    const value = loc.getValue(self);
-    const result = value & (1 << n);
-
-    self.regs.f.h = true;
-    self.regs.f.n = false;
-    self.regs.f.z = result == 0;
-}
-
-fn set(self: *Self, comptime loc: Location, comptime n: u3) void {
-    const value = loc.getValue(self);
-    const result = value | 1 << n;
-    loc.setValue(self, result);
-}
-
-fn res(self: *Self, comptime loc: Location, comptime n: u3) void {
-    const value = loc.getValue(self);
-    const result = value & ~@as(u8, 1 << n);
-    loc.setValue(self, result);
 }
 
 test "ld16" {
