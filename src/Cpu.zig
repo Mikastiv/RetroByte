@@ -215,23 +215,29 @@ pub fn execute(self: *Self) void {
         0xBD => self.cp(.l),
         0xBE => self.cp(.addr_hl),
         0xBF => self.cp(.a),
+        0xC1 => self.pop(.bc),
         0xC2 => self.jp(.nz),
         0xC3 => self.jp(.always),
+        0xC5 => self.push(.bc),
         0xC6 => self.add(.imm),
         0xCA => self.jp(.z),
         0xCB => self.prefixCb(),
         0xCE => self.adc(.imm),
+        0xD1 => self.pop(.de),
         0xD2 => self.jp(.nc),
         0xD3 => self.panic(),
+        0xD5 => self.push(.de),
         0xD6 => self.sub(.imm),
         0xDA => self.jp(.c),
         0xDB => self.panic(),
         0xDD => self.panic(),
         0xDE => self.sbc(.imm),
         0xE0 => self.ld(.zero_page, .a),
+        0xE1 => self.pop(.hl),
         0xE2 => self.ld(.zero_page_c, .a),
         0xE3 => self.panic(),
         0xE4 => self.panic(),
+        0xE5 => self.push(.hl),
         0xE6 => self.bitAnd(.imm),
         0xE8 => self.addSp(),
         0xE9 => self.jpHl(),
@@ -241,8 +247,10 @@ pub fn execute(self: *Self) void {
         0xED => self.panic(),
         0xEE => self.bitXor(.imm),
         0xF0 => self.ld(.a, .zero_page),
+        0xF1 => self.pop(.af),
         0xF2 => self.ld(.a, .zero_page_c),
         0xF4 => self.panic(),
+        0xF5 => self.push(.af),
         0xF6 => self.bitOr(.imm),
         0xF8 => self.ldHlSpImm(),
         0xF9 => self.ldSpHl(),
@@ -549,6 +557,27 @@ fn jumpRelative(self: *Self, offset: i8) void {
     self.jump(pc +% offset16);
 }
 
+fn stackPush(self: *Self, value: u16) void {
+    self.bus.tick();
+
+    const hi: u8 = @intCast(value >> 8);
+    const lo: u8 = @truncate(value);
+
+    self.regs.decSp();
+    self.bus.write(self.regs.sp(), hi);
+    self.regs.decSp();
+    self.bus.write(self.regs.sp(), lo);
+}
+
+fn stackPop(self: *Self) u16 {
+    const lo: u16 = self.bus.read(self.regs.sp());
+    self.regs.incSp();
+    const hi: u16 = self.bus.read(self.regs.sp());
+    self.regs.incSp();
+
+    return hi << 8 | lo;
+}
+
 fn nop(_: *Self) void {}
 
 fn panic(_: *Self) noreturn {
@@ -567,7 +596,7 @@ fn ld16(self: *Self, comptime reg: Reg16) void {
 
 fn ldAbsSp(self: *Self) void {
     const addr = self.read16();
-    const sp = self.regs._16.get(.sp);
+    const sp = self.regs.sp();
     self.bus.write(addr, @truncate(sp));
     self.bus.write(addr +% 1, @intCast(sp >> 8));
 }
@@ -575,7 +604,7 @@ fn ldAbsSp(self: *Self) void {
 fn ldHlSpImm(self: *Self) void {
     const signed: i16 = @as(i8, @bitCast(self.read8()));
     const offset: u16 = @bitCast(signed);
-    const sp = self.regs._16.get(.sp);
+    const sp = self.regs.sp();
 
     self.regs._16.set(.hl, sp +% offset);
 
@@ -666,7 +695,7 @@ fn adc(self: *Self, comptime loc: Location) void {
 fn addSp(self: *Self) void {
     const signed: i16 = @as(i8, @bitCast(self.read8()));
     const value: u16 = @bitCast(signed);
-    const sp = self.regs._16.get(.sp);
+    const sp = self.regs.sp();
 
     self.regs.f.c = addOverflow(u8, @truncate(sp), @truncate(value), 0)[1] != 0;
     self.regs.f.h = addOverflow(u4, @truncate(sp), @truncate(value), 0)[1] != 0;
@@ -796,6 +825,19 @@ fn ccf(self: *Self) void {
     self.regs.f.c = !self.regs.f.c;
     self.regs.f.h = false;
     self.regs.f.n = false;
+}
+
+fn push(self: *Self, comptime reg: Reg16) void {
+    const value = self.regs._16.get(reg);
+    self.stackPush(value);
+}
+
+fn pop(self: *Self, comptime reg: Reg16) void {
+    const value = self.stackPop();
+    self.regs._16.set(reg, value);
+
+    // Clear unused flags bits; they didn't exist on real hardware
+    if (reg == .af) self.regs.f._unused = 0;
 }
 
 fn aluRotateRight(self: *Self, value: u8, cy: u1) u8 {

@@ -50,9 +50,27 @@ pub const Registers = extern union {
         };
     }
 
+    pub fn pc(self: *const Self) u16 {
+        return self._16.get(.pc);
+    }
+
     pub fn incPc(self: *Self) void {
         const value = self._16.get(.pc);
         self._16.set(.pc, value +% 1);
+    }
+
+    pub fn sp(self: *const Self) u16 {
+        return self._16.get(.sp);
+    }
+
+    pub fn incSp(self: *Self) void {
+        const value = self._16.get(.sp);
+        self._16.set(.sp, value +% 1);
+    }
+
+    pub fn decSp(self: *Self) void {
+        const value = self._16.get(.sp);
+        self._16.set(.sp, value -% 1);
     }
 };
 
