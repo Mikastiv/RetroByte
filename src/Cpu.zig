@@ -215,21 +215,31 @@ pub fn execute(self: *Self) void {
         0xBD => self.cp(.l),
         0xBE => self.cp(.addr_hl),
         0xBF => self.cp(.a),
+        0xC0 => self.ret(.nz),
         0xC1 => self.pop(.bc),
         0xC2 => self.jp(.nz),
         0xC3 => self.jp(.always),
+        0xC4 => self.call(.nz),
         0xC5 => self.push(.bc),
         0xC6 => self.add(.imm),
+        0xC8 => self.ret(.z),
+        0xC9 => self.ret(.always),
         0xCA => self.jp(.z),
         0xCB => self.prefixCb(),
+        0xCC => self.call(.z),
+        0xCD => self.call(.always),
         0xCE => self.adc(.imm),
+        0xD0 => self.ret(.nc),
         0xD1 => self.pop(.de),
         0xD2 => self.jp(.nc),
         0xD3 => self.panic(),
+        0xD4 => self.call(.nc),
         0xD5 => self.push(.de),
         0xD6 => self.sub(.imm),
+        0xD8 => self.ret(.c),
         0xDA => self.jp(.c),
         0xDB => self.panic(),
+        0xDC => self.call(.c),
         0xDD => self.panic(),
         0xDE => self.sbc(.imm),
         0xE0 => self.ld(.zero_page, .a),
@@ -525,7 +535,7 @@ fn prefixCb(self: *Self) void {
 }
 
 pub fn read8(self: *Self) u8 {
-    const byte: u8 = self.bus.read(self.regs._16.get(.pc));
+    const byte: u8 = self.bus.read(self.regs.pc());
     self.regs.incPc();
     return byte;
 }
@@ -553,7 +563,7 @@ fn jump(self: *Self, addr: u16) void {
 
 fn jumpRelative(self: *Self, offset: i8) void {
     const offset16: u16 = @bitCast(@as(i16, offset));
-    const pc = self.regs._16.get(.pc);
+    const pc = self.regs.pc();
     self.jump(pc +% offset16);
 }
 
@@ -838,6 +848,22 @@ fn pop(self: *Self, comptime reg: Reg16) void {
 
     // Clear unused flags bits; they didn't exist on real hardware
     if (reg == .af) self.regs.f._unused = 0;
+}
+
+fn call(self: *Self, comptime cond: JumpCond) void {
+    const addr = self.read16();
+    if (shouldJump(self.regs.f, cond)) {
+        self.stackPush(self.regs.pc());
+        self.regs._16.set(.pc, addr);
+    }
+}
+
+fn ret(self: *Self, comptime cond: JumpCond) void {
+    if (cond != .always) self.bus.tick();
+    if (shouldJump(self.regs.f, cond)) {
+        const addr = self.stackPop();
+        self.jump(addr);
+    }
 }
 
 fn aluRotateRight(self: *Self, value: u8, cy: u1) u8 {
