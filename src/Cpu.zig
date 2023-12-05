@@ -64,7 +64,7 @@ pub fn execute(self: *Self) void {
         0x24 => self.inc(.h),
         0x25 => self.dec(.h),
         0x26 => self.ld(.h, .imm),
-        0x27 => self.cpl(),
+        0x27 => self.daa(),
         0x28 => self.jr(.z),
         0x29 => self.add16(.hl),
         0x2A => self.ld(.a, .addr_hli),
@@ -72,6 +72,7 @@ pub fn execute(self: *Self) void {
         0x2C => self.inc(.l),
         0x2D => self.dec(.l),
         0x2E => self.ld(.l, .imm),
+        0x2F => self.cpl(),
         0x30 => self.jr(.nc),
         0x31 => self.ld16(.sp),
         0x32 => self.ld(.addr_hld, .a),
@@ -823,6 +824,28 @@ fn jp(self: *Self, comptime cond: JumpCond) void {
 fn jpHl(self: *Self) void {
     const hl = self.regs._16.get(.hl);
     self.regs._16.set(.pc, hl);
+}
+
+fn daa(self: *Self) void {
+    var a = self.regs._8.get(.a);
+
+    const c = self.regs.f.c;
+    const n = self.regs.f.n;
+    const h = self.regs.f.h;
+
+    if (!n) { // after addition
+        if (c or a > 0x99) a +%= 0x60;
+        if (h or (a & 0x0F) > 0x09) a +%= 0x06;
+    } else { // after substraction
+        if (c) a -%= 0x60;
+        if (h) a -%= 0x06;
+    }
+
+    self.regs._8.set(.a, a);
+
+    self.regs.f.c = !n and (c or a > 0x99);
+    self.regs.f.z = a == 0;
+    self.regs.f.h = false;
 }
 
 fn scf(self: *Self) void {
