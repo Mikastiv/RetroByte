@@ -3,7 +3,6 @@ const c = @import("c.zig");
 const builtin = @import("builtin");
 const SDLContext = @import("SDLContext.zig");
 const Gameboy = @import("Gameboy.zig");
-const Bus = @import("bus.zig").Bus;
 
 var running = true;
 var frame = Gameboy.Frame{};
@@ -51,9 +50,7 @@ pub fn main() !void {
     var sdl = try SDLContext.init("RetroByte", 800, 600);
     try sdl.setDrawColor(0, 0, 0);
 
-    var gb = Gameboy{};
-    var main_bus = Bus{ .main_bus = .{} };
-    gb.init(&main_bus);
+    Gameboy.init();
 
     if (builtin.os.tag == .emscripten) {
         c.emscripten_set_main_loop_arg(emscriptenLoopWrapper, @ptrCast(&sdl), 0, 1);

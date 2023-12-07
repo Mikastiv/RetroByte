@@ -1,7 +1,5 @@
-const Self = @This();
 const std = @import("std");
-const Cpu = @import("Cpu.zig");
-const Bus = @import("bus.zig").Bus;
+const cpu = @import("cpu.zig");
 
 pub const screen_width = 160;
 pub const screen_height = 144;
@@ -33,11 +31,6 @@ pub const Frame = struct {
     }
 };
 
-cpu: Cpu = undefined,
-bus: *Bus = undefined,
-
-pub fn init(self: *Self, bus: *Bus) void {
-    self.bus = bus;
-    self.bus.init(self);
-    self.cpu = Cpu.init(self.bus);
+pub fn init() void {
+    cpu.init();
 }

@@ -1,40 +1,37 @@
-const Gameboy = @import("Gameboy.zig");
-const MainBus = @import("MainBus.zig");
-const TestBus = @import("TestBus.zig");
+const std = @import("std");
+const ram = @import("ram.zig");
 
-pub const Bus = union(enum) {
-    const Self = @This();
+const InterruptFlag = enum(u8) {
+    vblank = 1 << 0,
+    lcd = 1 << 1,
+    timer = 1 << 2,
+    serial = 1 << 3,
+    joypad = 1 << 4,
+};
 
-    main_bus: MainBus,
-    test_bus: TestBus,
+const Interrupts = struct {
+    flags: u8 = 0,
+    enable: u8 = 0,
 
-    pub fn init(self: *Self, gameboy: *const Gameboy) void {
-        switch (self.*) {
-            inline else => |*b| b.init(gameboy),
-        }
-    }
-
-    pub fn peek(self: *Self, addr: u16) u8 {
-        return switch (self.*) {
-            inline else => |*b| b.peek(addr),
-        };
-    }
-
-    pub fn read(self: *Self, addr: u16) u8 {
-        return switch (self.*) {
-            inline else => |*b| b.read(addr),
-        };
-    }
-
-    pub fn write(self: *Self, addr: u16, data: u8) void {
-        return switch (self.*) {
-            inline else => |*b| b.write(addr, data),
-        };
-    }
-
-    pub fn tick(self: *Self) void {
-        return switch (self.*) {
-            inline else => |*b| b.tick(),
-        };
+    pub fn request(self: *@This(), flag: InterruptFlag) void {
+        self.flags |= @intFromEnum(flag);
     }
 };
+
+const Bus = struct {
+    interrupts: Interrupts = .{},
+};
+
+pub fn peek(addr: u16) u8 {
+    return ram.wramRead(addr);
+}
+
+pub fn read(addr: u16) u8 {
+    return peek(addr);
+}
+
+pub fn write(addr: u16, data: u8) void {
+    ram.wramWrite(addr, data);
+}
+
+pub fn tick() void {}
