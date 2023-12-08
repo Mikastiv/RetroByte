@@ -14,6 +14,7 @@ const JumpCond = enum { c, z, nc, nz, always };
 const Cpu = struct {
     regs: Registers = undefined,
     halted: bool = false,
+    halt_bug: bool = false,
     ime: bool = false,
     enabling_ime: bool = false,
 };
@@ -522,7 +523,8 @@ fn stop() void {
 }
 
 fn halt() void {
-    cpu.halted = true;
+    cpu.halt_bug = !cpu.ime and interrupts.any();
+    cpu.halted = !cpu.halt_bug; // if halt bug occurs, cpu is not halted
 }
 
 fn ei() void {
@@ -651,6 +653,12 @@ fn res(comptime loc: Location, comptime n: u3) void {
 }
 
 pub fn execute(opcode: u8) void {
+    if (cpu.halt_bug) {
+        cpu.halt_bug = false;
+        const pc = cpu.regs.pc();
+        cpu.regs._16.set(.pc, pc -% 1);
+    }
+
     switch (opcode) {
         0x00 => nop(),
         0x01 => ld16(.bc),
