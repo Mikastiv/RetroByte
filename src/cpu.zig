@@ -1,7 +1,7 @@
 const std = @import("std");
-const registers = @import("cpu/registers.zig");
+const registers = @import("registers.zig");
+const interrupts = @import("interrupts.zig");
 const bus = @import("bus.zig");
-const expect = std.testing.expect;
 
 const Registers = registers.Registers;
 const Flags = registers.Flags;
@@ -109,7 +109,7 @@ pub fn init() void {
 }
 
 pub fn step() void {
-    if (handleInterrupts()) return;
+    handleInterrupt();
 
     if (cpu.enabling_ime) {
         cpu.enabling_ime = false;
@@ -120,18 +120,26 @@ pub fn step() void {
     execute(opcode);
 }
 
-fn interrupts() bool {
-    return false;
-}
-
-fn handleInterrupts() bool {
-    if (!interrupts()) return false;
-
-    if (!cpu.ime) return false;
+fn handleInterrupt() void {
+    if (!cpu.ime or !interrupts.any()) return;
 
     cpu.ime = false;
+    cpu.enabling_ime = false;
+    bus.tick();
+    bus.tick();
 
-    return true;
+    stackPush(cpu.regs.pc());
+
+    const interrupt = interrupts.highestPriority();
+    const addr: u16 = switch (interrupt) {
+        .vblank => 0x0040,
+        .lcd => 0x0048,
+        .timer => 0x0050,
+        .serial => 0x0058,
+        .joypad => 0x0060,
+    };
+    cpu.regs._16.set(.pc, addr);
+    interrupts.handled(interrupt);
 }
 
 pub fn read8() u8 {
@@ -1154,6 +1162,7 @@ fn prefixCb() void {
     }
 }
 
+const expect = std.testing.expect;
 const test_start_addr = 0xC000;
 
 fn test_init() void {

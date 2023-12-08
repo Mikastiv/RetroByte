@@ -1,5 +1,4 @@
 const std = @import("std");
-const expect = std.testing.expect;
 
 pub const Reg8 = enum(u8) { f = 0, a = 1, c = 2, b = 3, e = 4, d = 5, l = 6, h = 7 };
 pub const Reg16 = enum(u8) { af = 0, bc = 1, de = 2, hl = 3, sp = 4, pc = 5 };
@@ -71,6 +70,8 @@ pub const Registers = extern union {
         self._16.set(.sp, value -% 1);
     }
 };
+
+const expect = std.testing.expect;
 
 test "registers" {
     var regs: Registers = undefined;

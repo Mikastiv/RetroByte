@@ -68,6 +68,6 @@ pub fn main() !void {
 }
 
 test {
-    _ = @import("Cpu.zig");
-    _ = @import("cpu/registers.zig");
+    _ = @import("cpu.zig");
+    _ = @import("registers.zig");
 }
