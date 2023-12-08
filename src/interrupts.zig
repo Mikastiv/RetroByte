@@ -2,7 +2,7 @@ const std = @import("std");
 
 pub const Interrupt = enum(u8) {
     vblank = 1 << 0,
-    lcd = 1 << 1,
+    stat = 1 << 1,
     timer = 1 << 2,
     serial = 1 << 3,
     joypad = 1 << 4,

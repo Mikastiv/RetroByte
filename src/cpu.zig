@@ -109,22 +109,33 @@ pub fn init() void {
 }
 
 pub fn step() void {
-    handleInterrupt();
-
-    if (cpu.enabling_ime) {
-        cpu.enabling_ime = false;
+    if (cpu.enabling_ime and !cpu.ime) { // EI instruction delay
         cpu.ime = true;
+        cpu.enabling_ime = false;
+        execute(read8());
     }
 
-    const opcode: u8 = read8();
-    execute(opcode);
+    handleInterrupt();
+
+    if (cpu.halted) {
+        bus.tick();
+        return;
+    }
+
+    execute(read8());
 }
 
 fn handleInterrupt() void {
-    if (!cpu.ime or !interrupts.any()) return;
+    if (!interrupts.any()) return;
+
+    if (cpu.halted) {
+        cpu.halted = false;
+        bus.tick();
+    }
+
+    if (!cpu.ime) return;
 
     cpu.ime = false;
-    cpu.enabling_ime = false;
     bus.tick();
     bus.tick();
 
@@ -133,7 +144,7 @@ fn handleInterrupt() void {
     const interrupt = interrupts.highestPriority();
     const addr: u16 = switch (interrupt) {
         .vblank => 0x0040,
-        .lcd => 0x0048,
+        .stat => 0x0048,
         .timer => 0x0050,
         .serial => 0x0058,
         .joypad => 0x0060,
