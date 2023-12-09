@@ -36,8 +36,8 @@ const Instruction = struct {
         // }
         const mnemonic = self.mnemonic.toStr();
 
-        const dst = try self.dst.toStr(alloc, imm, imm_word, imm_s8);
-        const src = try self.src.toStr(alloc, imm, imm_word, imm_s8);
+        const dst = try self.dst.toStr(alloc, imm, imm_word, imm_s8, regs);
+        const src = try self.src.toStr(alloc, imm, imm_word, imm_s8, regs);
 
         const mnemonic_dst_src = if (self.dst == .none and self.src == .none)
             try std.fmt.allocPrint(alloc, "{s}", .{mnemonic})
@@ -46,7 +46,7 @@ const Instruction = struct {
         else
             try std.fmt.allocPrint(alloc, "{s} {s}", .{ mnemonic, dst });
 
-        std.debug.print("${x:0<2} {s: <15} ", .{ opcode, mnemonic_dst_src });
+        std.debug.print("${x:0>2} {s: <15} ", .{ opcode, mnemonic_dst_src });
 
         const z: u8 = if (regs.f.z) 'z' else '-';
         const n: u8 = if (regs.f.n) 'n' else '-';
@@ -55,7 +55,7 @@ const Instruction = struct {
         std.debug.print("| flags: {c}{c}{c}{c} ", .{ z, n, h, c });
 
         std.debug.print(
-            "| a: ${x:0<2} | bc: ${x:0<4} | de: ${x:0<4} | hl: ${x:0<4} | sp: ${x:0<4} | pc: ${x:0<4} | cycles: {d}\n",
+            "| a: ${x:0>2} | bc: ${x:0>4} | de: ${x:0>4} | hl: ${x:0>4} | sp: ${x:0>4} | pc: ${x:0>4} | cycles: {d}\n",
             .{ regs._8.get(.a), regs._16.get(.bc), regs._16.get(.de), regs._16.get(.hl), regs.sp(), regs.pc(), bus.cycles },
         );
     }
@@ -149,26 +149,26 @@ const Mode = enum {
     zero_page_c,
     sp_imm_s8,
 
-    fn toStr(self: @This(), alloc: std.mem.Allocator, imm: u8, imm_word: u16, imm_s8: i8) ![]const u8 {
+    fn toStr(self: @This(), alloc: std.mem.Allocator, imm: u8, imm_word: u16, imm_s8: i8, regs: Registers) ![]const u8 {
         return switch (self) {
             .none => "",
             .af, .bc, .de, .hl, .sp, .a, .b, .c, .d, .e, .h, .l => try std.fmt.allocPrint(alloc, "{s}", .{@tagName(self)}),
             .addr_hl => "(hl)",
             .addr_bc => "(bc)",
             .addr_de => "(de)",
-            .imm8 => try std.fmt.allocPrint(alloc, "#{x:0<2}", .{imm}),
-            .imm_addr => try std.fmt.allocPrint(alloc, "${x:0<4}", .{imm_word}),
-            .imm16 => try std.fmt.allocPrint(alloc, "#{x:0<4}", .{imm_word}),
-            .imm_s8 => try std.fmt.allocPrint(alloc, "#{x:0<2} ({d})", .{ imm, imm_s8 }),
+            .imm8 => try std.fmt.allocPrint(alloc, "#{x:0>2}", .{imm}),
+            .imm_addr => try std.fmt.allocPrint(alloc, "${x:0>4}", .{imm_word}),
+            .imm16 => try std.fmt.allocPrint(alloc, "#{x:0>4}", .{imm_word}),
+            .imm_s8 => try std.fmt.allocPrint(alloc, "#{x:0>2} ({d})", .{ imm, imm_s8 }),
             .cond_nz => "nz",
             .cond_nc => "nc",
             .cond_z => "z",
             .cond_c => "c",
             .addr_hli => "(hl+)",
             .addr_hld => "(hl-)",
-            .zero_page => "",
-            .zero_page_c => "",
-            .sp_imm_s8 => try std.fmt.allocPrint(alloc, "sp+#{x:0<2} ({d})", .{ imm_word, imm_s8 }),
+            .zero_page => try std.fmt.allocPrint(alloc, "${x:0>4}", .{0xFF00 | @as(u16, imm)}),
+            .zero_page_c => try std.fmt.allocPrint(alloc, "${x:0>4}", .{0xFF00 | @as(u16, regs._8.get(.c))}),
+            .sp_imm_s8 => try std.fmt.allocPrint(alloc, "sp+#{x:0>2} ({d})", .{ imm_word, imm_s8 }),
         };
     }
 };
