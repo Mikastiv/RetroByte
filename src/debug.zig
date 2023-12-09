@@ -86,109 +86,302 @@ const Mnemonic = enum {
     }
 };
 
-const Dst = enum {
-    implied,
-    r16,
-    addr_r16,
-    r8,
+const Mode = enum {
+    none,
+    af,
+    bc,
+    de,
+    hl,
+    sp,
+    a,
+    b,
+    c,
+    d,
+    e,
+    h,
+    l,
+    addr_hl,
+    addr_bc,
+    addr_de,
+    imm8,
+    imm_addr,
     imm16,
     imm_s8,
-    cond,
+    cond_nz,
+    cond_nc,
+    cond_z,
+    cond_c,
     addr_hli,
     addr_hld,
 };
 
-fn mnemonic(opcode: u8) Mnemonic {
-    return switch (opcode) {
-        0x00 => .nop,
-        0x10 => .stop,
-        0x27 => .daa,
-        0x2F => .cpl,
-        0x37 => .scf,
-        0x3F => .ccf,
-        0x76 => .halt,
-        0x01,
-        0x02,
-        0x06,
-        0x08,
-        0x0A,
-        0x0E,
-        0x11...0x13,
-        0x16,
-        0x1A,
-        0x1E,
-        0x21,
-        0x22,
-        0x26,
-        0x2A,
-        0x2E,
-        0x31,
-        0x32,
-        0x36,
-        0x3A,
-        0x3E,
-        0x40...0x75,
-        0x77...0x7F,
-        0xE0,
-        0xE2,
-        0xEA,
-        0xF0,
-        0xF2,
-        0xF8,
-        0xF9,
-        0xFA,
-        => .ld,
-        0x03,
-        0x04,
-        0x0C,
-        0x14,
-        0x1C,
-        0x23,
-        0x24,
-        0x2C,
-        0x33,
-        0x34,
-        0x3C,
-        => .inc,
-        0x05,
-        0x0B,
-        0x0D,
-        0x15,
-        0x1B,
-        0x1D,
-        0x25,
-        0x2B,
-        0x2D,
-        0x35,
-        0x3B,
-        0x3D,
-        => .dec,
-        0x07 => .rcla,
-        0x0F => .rrca,
-        0x17 => .rla,
-        0x1F => .rra,
-        0x09, 0x19, 0x29, 0x39, 0x80...0x87, 0xC6, 0xE8 => .add,
-        0x88...0x8F, 0xCE => .adc,
-        0x18, 0x20, 0x28, 0x30, 0x38 => .jr,
-        0x90...0x97, 0xD6 => .sub,
-        0x98...0x9F, 0xDE => .sbc,
-        0xA0...0xA7, 0xE6 => .bit_and,
-        0xA8...0xAF, 0xEE => .bit_xor,
-        0xB0...0xB7, 0xF6 => .bit_or,
-        0xB8...0xBF, 0xFE => .cp,
-        0xC0, 0xC8, 0xC9, 0xD0, 0xD8 => .ret,
-        0xC1, 0xD1, 0xE1, 0xF1 => .pop,
-        0xC2, 0xC3, 0xCA, 0xD2, 0xDA, 0xE9 => .jp,
-        0xC4, 0xCC, 0xCD, 0xD4, 0xDC => .call,
-        0xC5, 0xD5, 0xE5, 0xF5 => .push,
-        0xC7, 0xCF, 0xD7, 0xDF, 0xE7, 0xEF, 0xF7, 0xFF => .rst,
-        0xD9 => .reti,
-        0xCB => .prefix_cb,
-        0xD3, 0xDB, 0xDD, 0xE3, 0xE4, 0xEB...0xED, 0xF4, 0xFC, 0xFD => .panic,
-        0xF3 => .di,
-        0xFB => .ei,
-    };
-}
+const Instruction = struct {
+    mnemonic: Mnemonic,
+    dst: Mode,
+    src: Mode,
+    cycles: u8,
+};
+
+const instructions = blk: {
+    var i: [0x100]Instruction = undefined;
+    i[0x00] = .{ .mnemonic = .nop, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x01] = .{ .mnemonic = .ld, .dst = .bc, .src = .imm16, .cycles = 3 };
+    i[0x02] = .{ .mnemonic = .ld, .dst = .addr_bc, .src = .a, .cycles = 2 };
+    i[0x03] = .{ .mnemonic = .inc, .dst = .bc, .src = .none, .cycles = 2 };
+    i[0x04] = .{ .mnemonic = .inc, .dst = .b, .src = .none, .cycles = 1 };
+    i[0x05] = .{ .mnemonic = .dec, .dst = .b, .src = .none, .cycles = 1 };
+    i[0x06] = .{ .mnemonic = .ld, .dst = .b, .src = .imm8, .cycles = 2 };
+    i[0x07] = .{ .mnemonic = .rcla, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x08] = .{ .mnemonic = .ld, .dst = .imm_addr, .src = .sp, .cycles = 5 };
+    i[0x09] = .{ .mnemonic = .add, .dst = .hl, .src = .bc, .cycles = 2 };
+    i[0x0A] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x0B] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x0C] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x0D] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x0E] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x0F] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x10] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x11] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x12] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x13] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x14] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x15] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x16] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x17] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x18] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x19] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x1A] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x1B] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x1C] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x1D] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x1E] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x1F] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x20] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x21] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x22] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x23] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x24] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x25] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x26] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x27] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x28] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x29] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x2A] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x2B] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x2C] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x2D] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x2E] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x2F] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x30] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x31] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x32] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x33] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x34] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x35] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x36] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x37] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x38] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x39] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x3A] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x3B] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x3C] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x3D] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x3E] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x3F] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x40] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x41] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x42] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x43] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x44] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x45] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x46] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x47] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x48] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x49] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x4A] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x4B] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x4C] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x4D] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x4E] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x4F] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x50] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x51] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x52] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x53] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x54] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x55] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x56] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x57] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x58] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x59] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x5A] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x5B] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x5C] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x5D] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x5E] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x5F] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x60] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x61] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x62] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x63] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x64] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x65] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x66] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x67] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x68] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x69] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x6A] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x6B] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x6C] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x6D] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x6E] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x6F] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x70] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x71] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x72] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x73] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x74] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x75] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x76] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x77] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x78] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x79] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x7A] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x7B] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x7C] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x7D] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x7E] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x7F] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x80] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x81] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x82] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x83] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x84] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x85] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x86] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x87] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x88] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x89] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x8A] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x8B] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x8C] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x8D] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x8E] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x8F] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x90] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x91] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x92] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x93] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x94] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x95] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x96] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x97] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x98] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x99] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x9A] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x9B] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x9C] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x9D] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x9E] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0x9F] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xA0] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xA1] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xA2] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xA3] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xA4] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xA5] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xA6] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xA7] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xA8] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xA9] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xAA] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xAB] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xAC] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xAD] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xAE] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xAF] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xB0] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xB1] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xB2] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xB3] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xB4] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xB5] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xB6] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xB7] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xB8] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xB9] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xBA] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xBB] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xBC] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xBD] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xBE] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xBF] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xC0] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xC1] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xC2] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xC3] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xC4] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xC5] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xC6] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xC7] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xC8] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xC9] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xCA] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xCB] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xCC] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xCD] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xCE] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xCF] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xD0] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xD1] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xD2] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xD3] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xD4] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xD5] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xD6] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xD7] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xD8] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xD9] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xDA] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xDB] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xDC] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xDD] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xDE] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xDF] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xE0] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xE1] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xE2] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xE3] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xE4] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xE5] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xE6] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xE7] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xE8] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xE9] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xEA] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xEB] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xEC] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xED] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xEE] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xEF] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xF0] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xF1] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xF2] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xF3] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xF4] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xF5] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xF6] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xF7] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xF8] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xF9] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xFA] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xFB] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xFC] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xFD] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xFE] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    i[0xFF] = .{ .mnemonic = .ld, .dst = .none, .src = .none, .cycles = 1 };
+    break :blk i;
+};
 
 fn prefixCb(opcode: u8) Mnemonic {
     return switch (opcode) {
