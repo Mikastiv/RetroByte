@@ -50,17 +50,16 @@ pub fn main() !void {
     var sdl = try SDLContext.init("RetroByte", 800, 600);
     try sdl.setDrawColor(0, 0, 0);
 
-    Gameboy.init();
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+
+    const allocator = arena.allocator();
+
+    try Gameboy.init(allocator, "rom/smb.gb");
 
     if (builtin.os.tag == .emscripten) {
         c.emscripten_set_main_loop_arg(emscriptenLoopWrapper, @ptrCast(&sdl), 0, 1);
     } else {
-        var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-        defer arena.deinit();
-
-        const allocator = arena.allocator();
-        _ = allocator;
-
         while (running) {
             try runLoop(&sdl);
         }

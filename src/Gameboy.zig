@@ -1,5 +1,6 @@
 const std = @import("std");
 const cpu = @import("cpu.zig");
+const rom = @import("rom.zig");
 
 pub const screen_width = 160;
 pub const screen_height = 144;
@@ -31,6 +32,13 @@ pub const Frame = struct {
     }
 };
 
-pub fn init() void {
+pub fn init(allocator: std.mem.Allocator, rom_filepath: []const u8) !void {
+    const file = try std.fs.cwd().openFile(rom_filepath, .{});
+    defer file.close();
+
+    const bytes = try file.readToEndAlloc(allocator, std.math.maxInt(usize));
+    rom.init(bytes);
     cpu.init();
+
+    try rom.printHeader();
 }
