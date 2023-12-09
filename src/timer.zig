@@ -96,6 +96,9 @@ pub fn tmaRead() u8 {
 
 pub fn tmaWrite(value: u8) void {
     tma = value;
+    if (tima_just_loaded) {
+        tima = value;
+    }
 }
 
 pub fn timaRead() u8 {
