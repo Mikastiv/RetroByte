@@ -662,7 +662,7 @@ fn execute(opcode: u8) void {
         cpu.regs._16.set(.pc, pc -% 1);
     }
 
-    debug.disassemble(opcode, cpu.regs);
+    debug.disassemble(opcode, cpu.regs) catch unreachable;
 
     switch (opcode) {
         0x00 => nop(),

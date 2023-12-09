@@ -3,31 +3,63 @@ const bus = @import("bus.zig");
 const registers = @import("registers.zig");
 const Registers = registers.Registers;
 
-pub fn disassemble(opcode: u8, regs: Registers) void {
+pub fn disassemble(opcode: u8, regs: Registers) !void {
     const pc = regs.pc();
     const imm = bus.peek(pc);
     const imm_word = @as(u16, bus.peek(pc + 1)) << 8 | imm;
     _ = imm_word;
 
-    const inst = mnemonic(opcode);
-    const prefix_cb = if (inst == .prefix_cb) prefixCb(imm) else null;
-    if (prefix_cb) |prefix| {
-        std.debug.print("{s: <5} ", .{@tagName(prefix)});
-    } else {
-        std.debug.print("{s: <5} ", .{inst.toStr()});
-    }
-
-    const z: u8 = if (regs.f.z) 'z' else '-';
-    const n: u8 = if (regs.f.n) 'n' else '-';
-    const h: u8 = if (regs.f.h) 'h' else '-';
-    const c: u8 = if (regs.f.c) 'c' else '-';
-    std.debug.print("| flags: {c}{c}{c}{c} ", .{ z, n, h, c });
-
-    std.debug.print(
-        "| a: ${x:0<2} | bc: ${x:0<4} | de: ${x:0<4} | hl: ${x:0<4} | sp: ${x:0<4} | pc: ${x:0<4} | cycles: {d}\n",
-        .{ regs._8.get(.a), regs._16.get(.bc), regs._16.get(.de), regs._16.get(.hl), regs.sp(), regs.pc(), bus.cycles },
-    );
+    const inst = instructions[opcode];
+    try inst.print(opcode, regs);
 }
+
+const Instruction = struct {
+    mnemonic: Mnemonic,
+    dst: Mode,
+    src: Mode,
+    cycles: u8,
+
+    fn print(self: @This(), opcode: u8, regs: Registers) !void {
+        const pc = regs.pc();
+        const imm = bus.peek(pc);
+        const imm_s8: i8 = @bitCast(imm);
+        const imm_word = @as(u16, bus.peek(pc + 1)) << 8 | imm;
+
+        var buffer: [512]u8 = undefined;
+        var fixed = std.heap.FixedBufferAllocator.init(&buffer);
+        const alloc = fixed.allocator();
+        // const prefix_cb = if (self.mnemonic == .prefix_cb) prefixCb(imm) else null;
+        // if (prefix_cb) |prefix| {
+        // std.debug.print("{s: <5} ", .{@tagName(prefix)});
+        // } else {
+        // std.fmt.bufPrint(&buffer, "{s: >5} ", .{});
+        // }
+        const mnemonic = self.mnemonic.toStr();
+
+        const dst = try self.dst.toStr(alloc, imm, imm_word, imm_s8);
+        const src = try self.src.toStr(alloc, imm, imm_word, imm_s8);
+
+        const mnemonic_dst_src = if (self.dst == .none and self.src == .none)
+            try std.fmt.allocPrint(alloc, "{s}", .{mnemonic})
+        else if (self.dst != .none and self.src != .none)
+            try std.fmt.allocPrint(alloc, "{s} {s}, {s}", .{ mnemonic, dst, src })
+        else
+            try std.fmt.allocPrint(alloc, "{s} {s}", .{ mnemonic, dst });
+
+        std.debug.print("${x:0<2} {s: <15} ", .{ opcode, mnemonic_dst_src });
+
+        const z: u8 = if (regs.f.z) 'z' else '-';
+        const n: u8 = if (regs.f.n) 'n' else '-';
+        const h: u8 = if (regs.f.h) 'h' else '-';
+        const c: u8 = if (regs.f.c) 'c' else '-';
+        std.debug.print("| flags: {c}{c}{c}{c} ", .{ z, n, h, c });
+
+        std.debug.print(
+            "| a: ${x:0<2} | bc: ${x:0<4} | de: ${x:0<4} | hl: ${x:0<4} | sp: ${x:0<4} | pc: ${x:0<4} | cycles: {d}\n",
+            .{ regs._8.get(.a), regs._16.get(.bc), regs._16.get(.de), regs._16.get(.hl), regs.sp(), regs.pc(), bus.cycles },
+        );
+    }
+};
 
 const Mnemonic = enum {
     nop,
@@ -116,13 +148,29 @@ const Mode = enum {
     zero_page,
     zero_page_c,
     sp_imm_s8,
-};
 
-const Instruction = struct {
-    mnemonic: Mnemonic,
-    dst: Mode,
-    src: Mode,
-    cycles: u8,
+    fn toStr(self: @This(), alloc: std.mem.Allocator, imm: u8, imm_word: u16, imm_s8: i8) ![]const u8 {
+        return switch (self) {
+            .none => "",
+            .af, .bc, .de, .hl, .sp, .a, .b, .c, .d, .e, .h, .l => try std.fmt.allocPrint(alloc, "{s}", .{@tagName(self)}),
+            .addr_hl => "(hl)",
+            .addr_bc => "(bc)",
+            .addr_de => "(de)",
+            .imm8 => try std.fmt.allocPrint(alloc, "#{x:0<2}", .{imm}),
+            .imm_addr => try std.fmt.allocPrint(alloc, "${x:0<4}", .{imm_word}),
+            .imm16 => try std.fmt.allocPrint(alloc, "#{x:0<4}", .{imm_word}),
+            .imm_s8 => try std.fmt.allocPrint(alloc, "#{x:0<2} ({d})", .{ imm, imm_s8 }),
+            .cond_nz => "nz",
+            .cond_nc => "nc",
+            .cond_z => "z",
+            .cond_c => "c",
+            .addr_hli => "(hl+)",
+            .addr_hld => "(hl-)",
+            .zero_page => "",
+            .zero_page_c => "",
+            .sp_imm_s8 => try std.fmt.allocPrint(alloc, "sp+#{x:0<2} ({d})", .{ imm_word, imm_s8 }),
+        };
+    }
 };
 
 const instructions = blk: {
@@ -141,7 +189,7 @@ const instructions = blk: {
     i[0x0B] = .{ .mnemonic = .dec, .dst = .bc, .src = .none, .cycles = 2 };
     i[0x0C] = .{ .mnemonic = .inc, .dst = .c, .src = .none, .cycles = 1 };
     i[0x0D] = .{ .mnemonic = .dec, .dst = .c, .src = .none, .cycles = 1 };
-    i[0x0E] = .{ .mnemonic = .ld, .dst = .c, .src = .imm, .cycles = 2 };
+    i[0x0E] = .{ .mnemonic = .ld, .dst = .c, .src = .imm8, .cycles = 2 };
     i[0x0F] = .{ .mnemonic = .rrca, .dst = .none, .src = .none, .cycles = 1 };
     i[0x10] = .{ .mnemonic = .stop, .dst = .none, .src = .none, .cycles = 1 };
     i[0x11] = .{ .mnemonic = .ld, .dst = .de, .src = .imm16, .cycles = 3 };
