@@ -4,6 +4,8 @@ const rom = @import("rom.zig");
 const timer = @import("timer.zig");
 const interrupts = @import("interrupts.zig");
 
+pub var cycles: u64 = 0;
+
 pub fn peek(addr: u16) u8 {
     return switch (addr) {
         0x0000...0x7FFF => rom.read(addr),
@@ -43,4 +45,7 @@ pub fn write(addr: u16, data: u8) void {
     }
 }
 
-pub fn tick() void {}
+pub fn tick() void {
+    timer.tick();
+    cycles += 1;
+}

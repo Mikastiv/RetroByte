@@ -2,6 +2,7 @@ const std = @import("std");
 const registers = @import("registers.zig");
 const interrupts = @import("interrupts.zig");
 const bus = @import("bus.zig");
+const debug = @import("debug.zig");
 
 const Registers = registers.Registers;
 const Flags = registers.Flags;
@@ -107,6 +108,7 @@ var cpu: Cpu = .{};
 
 pub fn init() void {
     cpu.regs = Registers.init();
+    bus.cycles = 0;
 }
 
 pub fn step() void {
@@ -659,6 +661,8 @@ fn execute(opcode: u8) void {
         const pc = cpu.regs.pc();
         cpu.regs._16.set(.pc, pc -% 1);
     }
+
+    debug.disassemble(opcode, cpu.regs);
 
     switch (opcode) {
         0x00 => nop(),
