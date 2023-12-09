@@ -30,6 +30,7 @@ fn runLoop(sdl: *SDLContext) !void {
     }
 
     Gameboy.step();
+    std.time.sleep(std.time.ns_per_ms * 250);
 
     for (&frame.pixels) |*p| {
         p.* = rng.random().int(u8);

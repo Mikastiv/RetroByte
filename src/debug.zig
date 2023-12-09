@@ -12,9 +12,21 @@ pub fn disassemble(opcode: u8, regs: Registers) void {
     const inst = mnemonic(opcode);
     const prefix_cb = if (inst == .prefix_cb) prefixCb(imm) else null;
     if (prefix_cb) |prefix| {
-        std.debug.print("{s} ", .{@tagName(prefix)});
+        std.debug.print("{s: <5} ", .{@tagName(prefix)});
+    } else {
+        std.debug.print("{s: <5} ", .{inst.toStr()});
     }
-    std.debug.print("{s}\n", .{@tagName(inst)});
+
+    const z: u8 = if (regs.f.z) 'z' else '-';
+    const n: u8 = if (regs.f.n) 'n' else '-';
+    const h: u8 = if (regs.f.h) 'h' else '-';
+    const c: u8 = if (regs.f.c) 'c' else '-';
+    std.debug.print("| flags: {c}{c}{c}{c} ", .{ z, n, h, c });
+
+    std.debug.print(
+        "| a: ${x:0<2} | bc: ${x:0<4} | de: ${x:0<4} | hl: ${x:0<4} | sp: ${x:0<4} | pc: ${x:0<4} | cycles: {d}\n",
+        .{ regs._8.get(.a), regs._16.get(.bc), regs._16.get(.de), regs._16.get(.hl), regs.sp(), regs.pc(), bus.cycles },
+    );
 }
 
 const Mnemonic = enum {
@@ -63,6 +75,27 @@ const Mnemonic = enum {
     bit,
     res,
     set,
+
+    fn toStr(self: @This()) []const u8 {
+        return switch (self) {
+            .bit_and => "and",
+            .bit_xor => "xor",
+            .bit_or => "or",
+            else => @tagName(self),
+        };
+    }
+};
+
+const Dst = enum {
+    implied,
+    r16,
+    addr_r16,
+    r8,
+    imm16,
+    imm_s8,
+    cond,
+    addr_hli,
+    addr_hld,
 };
 
 fn mnemonic(opcode: u8) Mnemonic {
