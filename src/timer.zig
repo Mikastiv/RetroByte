@@ -29,7 +29,7 @@ fn timerEnabled() bool {
 fn incrementTima() void {
     tima, const overflow = @addWithOverflow(tima, 1);
 
-    if (overflow) {
+    if (overflow != 0) {
         tima = 0;
         request_interrupt = true;
     }

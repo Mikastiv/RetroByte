@@ -9,8 +9,20 @@ pub const Interrupt = enum(u8) {
 var requests: u8 = 0;
 var enabled: u8 = 0;
 
+pub fn enabledFlags() u8 {
+    return enabled;
+}
+
+pub fn requestedFlags() u8 {
+    return requests;
+}
+
 pub fn request(interrupt: Interrupt) void {
     requests |= @intFromEnum(interrupt);
+}
+
+pub fn rawRequest(value: u8) void {
+    requests = value;
 }
 
 pub fn enable(flags: u8) void {

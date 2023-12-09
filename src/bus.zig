@@ -1,36 +1,43 @@
+const std = @import("std");
 const ram = @import("ram.zig");
-
-const InterruptFlag = enum(u8) {
-    vblank = 1 << 0,
-    lcd = 1 << 1,
-    timer = 1 << 2,
-    serial = 1 << 3,
-    joypad = 1 << 4,
-};
-
-const Interrupts = struct {
-    flags: u8 = 0,
-    enable: u8 = 0,
-
-    pub fn request(self: *@This(), flag: InterruptFlag) void {
-        self.flags |= @intFromEnum(flag);
-    }
-};
-
-const Bus = struct {
-    interrupts: Interrupts = .{},
-};
+const timer = @import("timer.zig");
+const interrupts = @import("interrupts.zig");
 
 pub fn peek(addr: u16) u8 {
-    return ram.wramRead(addr);
+    return switch (addr) {
+        0xC000...0xFDFF => ram.wramRead(addr),
+        0xFF04 => timer.divRead(),
+        0xFF05 => timer.timaRead(),
+        0xFF06 => timer.tmaRead(),
+        0xFF07 => timer.tacRead(),
+        0xFF0F => interrupts.requestedFlags(),
+        0xFF80...0xFFFE => ram.hramRead(addr),
+        0xFFFF => interrupts.enabledFlags(),
+        else => {
+            std.debug.print("unimplemented read {d}\n", .{addr});
+            return 0;
+        },
+    };
 }
 
 pub fn read(addr: u16) u8 {
+    tick();
     return peek(addr);
 }
 
 pub fn write(addr: u16, data: u8) void {
-    ram.wramWrite(addr, data);
+    tick();
+    switch (addr) {
+        0xC000...0xFDFF => ram.wramWrite(addr, data),
+        0xFF04 => timer.divWrite(),
+        0xFF05 => timer.timaWrite(data),
+        0xFF06 => timer.tmaWrite(data),
+        0xFF07 => timer.tacWrite(data),
+        0xFF0F => interrupts.rawRequest(data),
+        0xFF80...0xFFFE => ram.hramWrite(addr, data),
+        0xFFFF => interrupts.enable(data),
+        else => std.debug.print("unimplemented write {d}\n", .{addr}),
+    }
 }
 
 pub fn tick() void {}
