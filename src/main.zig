@@ -46,7 +46,9 @@ fn emscriptenLoopWrapper(arg: ?*anyopaque) callconv(.C) void {
     runLoop(sdl) catch @panic("loop error");
 }
 
-pub fn main() !void {
+pub fn main() !u8 {
+    const stderr = std.io.getStdErr().writer();
+
     var sdl = try SDLContext.init("RetroByte", 800, 600);
     try sdl.setDrawColor(0, 0, 0);
 
@@ -54,8 +56,14 @@ pub fn main() !void {
     defer arena.deinit();
 
     const allocator = arena.allocator();
+    const args = try std.process.argsAlloc(allocator);
 
-    try Gameboy.init(allocator, "rom/smb.gb");
+    if (args.len != 2) {
+        try stderr.print("usage: {s} <rom file>\n", .{args[0]});
+        return 1;
+    }
+
+    try Gameboy.init(allocator, args[1]);
 
     if (builtin.os.tag == .emscripten) {
         c.emscripten_set_main_loop_arg(emscriptenLoopWrapper, @ptrCast(&sdl), 0, 1);
@@ -64,6 +72,8 @@ pub fn main() !void {
             try runLoop(&sdl);
         }
     }
+
+    return 0;
 }
 
 test {
