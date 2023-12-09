@@ -29,6 +29,8 @@ fn runLoop(sdl: *SDLContext) !void {
         }
     }
 
+    Gameboy.step();
+
     for (&frame.pixels) |*p| {
         p.* = rng.random().int(u8);
     }

@@ -1,10 +1,12 @@
 const std = @import("std");
 const ram = @import("ram.zig");
+const rom = @import("rom.zig");
 const timer = @import("timer.zig");
 const interrupts = @import("interrupts.zig");
 
 pub fn peek(addr: u16) u8 {
     return switch (addr) {
+        0x0000...0x7FFF => rom.read(addr),
         0xC000...0xFDFF => ram.wramRead(addr),
         0xFF04 => timer.divRead(),
         0xFF05 => timer.timaRead(),
@@ -28,6 +30,7 @@ pub fn read(addr: u16) u8 {
 pub fn write(addr: u16, data: u8) void {
     tick();
     switch (addr) {
+        0x0000...0x7FFF => rom.write(addr, data),
         0xC000...0xFDFF => ram.wramWrite(addr, data),
         0xFF04 => timer.divWrite(),
         0xFF05 => timer.timaWrite(data),

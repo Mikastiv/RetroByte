@@ -42,3 +42,7 @@ pub fn init(allocator: std.mem.Allocator, rom_filepath: []const u8) !void {
 
     try rom.printHeader();
 }
+
+pub fn step() void {
+    cpu.step();
+}

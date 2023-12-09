@@ -38,7 +38,7 @@ const Location = enum {
     zero_page,
     zero_page_c,
 
-    pub fn getAddress(comptime loc: @This()) u16 {
+    fn getAddress(comptime loc: @This()) u16 {
         return switch (loc) {
             .addr_bc => cpu.regs._16.get(.bc),
             .addr_de => cpu.regs._16.get(.de),
@@ -68,7 +68,7 @@ const Location = enum {
         };
     }
 
-    pub fn getValue(comptime loc: @This()) u8 {
+    fn getValue(comptime loc: @This()) u8 {
         return switch (loc) {
             .a => cpu.regs._8.get(.a),
             .f => cpu.regs._8.get(.f),
@@ -155,13 +155,13 @@ fn handleInterrupt() void {
     interrupts.handled(interrupt);
 }
 
-pub fn read8() u8 {
+fn read8() u8 {
     const byte: u8 = bus.read(cpu.regs.pc());
     cpu.regs.incPc();
     return byte;
 }
 
-pub fn read16() u16 {
+fn read16() u16 {
     const lo: u16 = read8();
     const hi: u16 = read8();
     return hi << 8 | lo;
@@ -653,7 +653,7 @@ fn res(comptime loc: Location, comptime n: u3) void {
     loc.setValue(result);
 }
 
-pub fn execute(opcode: u8) void {
+fn execute(opcode: u8) void {
     if (cpu.halt_bug) {
         cpu.halt_bug = false;
         const pc = cpu.regs.pc();

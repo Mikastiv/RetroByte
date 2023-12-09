@@ -61,7 +61,8 @@ pub fn read(addr: u16) u8 {
 }
 
 pub fn write(addr: u16, data: u8) void {
-    rom[addr] = data;
+    _ = data;
+    _ = addr;
 }
 
 fn parseHeader(bytes: []const u8) Header {
