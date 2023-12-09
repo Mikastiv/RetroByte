@@ -1,5 +1,3 @@
-const std = @import("std");
-
 pub const Interrupt = enum(u8) {
     vblank = 1 << 0,
     stat = 1 << 1,

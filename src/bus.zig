@@ -1,4 +1,3 @@
-const std = @import("std");
 const ram = @import("ram.zig");
 
 const InterruptFlag = enum(u8) {

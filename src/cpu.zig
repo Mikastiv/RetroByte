@@ -114,6 +114,7 @@ pub fn step() void {
         cpu.ime = true;
         cpu.enabling_ime = false;
         execute(read8());
+        return;
     }
 
     handleInterrupt();
@@ -302,14 +303,14 @@ fn addOverflow(comptime T: type, a: T, b: T, cy: u1) struct { T, u1 } {
 
 fn aluAdd(value: u8, cy: u1) void {
     const a = cpu.regs._8.get(.a);
-    const result = addOverflow(u8, a, value, cy);
+    const result, const carry = addOverflow(u8, a, value, cy);
 
-    cpu.regs.f.c = result[1] != 0;
+    cpu.regs.f.c = carry != 0;
     cpu.regs.f.h = addOverflow(u4, @truncate(a), @truncate(value), cy)[1] != 0;
     cpu.regs.f.n = false;
-    cpu.regs.f.z = result[0] & 0xFF == 0;
+    cpu.regs.f.z = result & 0xFF == 0;
 
-    cpu.regs._8.set(.a, result[0]);
+    cpu.regs._8.set(.a, result);
 }
 
 fn add(comptime loc: Location) void {
@@ -341,14 +342,14 @@ fn addSp() void {
 fn add16(comptime reg: Reg16) void {
     const value = cpu.regs._16.get(reg);
     const hl = cpu.regs._16.get(.hl);
-    const result = addOverflow(u16, hl, value, 0);
+    const result, const carry = addOverflow(u16, hl, value, 0);
 
-    cpu.regs.f.c = result[1] != 0;
+    cpu.regs.f.c = carry != 0;
     cpu.regs.f.h = addOverflow(u12, @truncate(hl), @truncate(value), 0)[1] != 0;
     cpu.regs.f.n = false;
-    cpu.regs.f.z = result[0] == 0;
+    cpu.regs.f.z = result == 0;
 
-    cpu.regs._16.set(.hl, result[0]);
+    cpu.regs._16.set(.hl, result);
 
     bus.tick();
 }
