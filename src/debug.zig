@@ -5,6 +5,13 @@ const Registers = @import("registers.zig").Registers;
 var dbg_msg_buffer = [_]u8{0} ** 1024;
 var dbg_msg_len: usize = 0;
 
+var buffered_writer: std.io.BufferedWriter(4096, std.fs.File.Writer) = undefined;
+
+pub fn init() void {
+    const stdout = std.io.getStdOut();
+    buffered_writer = std.io.bufferedWriter(stdout.writer());
+}
+
 pub fn update() void {
     if (bus.peek(0xFF02) == 0x81) {
         const char = bus.peek(0xFF01);
@@ -15,10 +22,9 @@ pub fn update() void {
 }
 
 pub fn print() void {
-    const stdout = std.io.getStdOut().writer();
     const msg = dbg_msg_buffer[0..dbg_msg_len];
     if (std.mem.indexOf(u8, msg, "Failed") != null or std.mem.indexOf(u8, msg, "Passed") != null)
-        stdout.print("{s}\n", .{msg}) catch unreachable;
+        buffered_writer.writer().print("{s}\n", .{msg}) catch unreachable;
 }
 
 pub fn disassemble(opcode: u8, regs: Registers) !void {
@@ -26,7 +32,7 @@ pub fn disassemble(opcode: u8, regs: Registers) !void {
     try inst.print(opcode, regs);
 }
 
-fn printRegisters(regs: Registers) void {
+fn printRegisters(regs: Registers) !void {
     const z: u8 = if (regs.f.z) 'z' else '-';
     const n: u8 = if (regs.f.n) 'n' else '-';
     const h: u8 = if (regs.f.h) 'h' else '-';
@@ -35,9 +41,9 @@ fn printRegisters(regs: Registers) void {
     const bc = regs._16.get(.bc);
     const de = regs._16.get(.de);
     const hl = regs._16.get(.hl);
-    std.debug.print(
-        "| flags: {c}{c}{c}{c} | a: #{x:0>2} | bc: #{x:0>4} | de: #{x:0>4} | hl: #{x:0>4} | sp: ${x:0>4} | pc: ${x:0>4} | cycles: {d}\n",
-        .{ z, n, h, c, a, bc, de, hl, regs.sp(), regs.pc(), bus.cycles },
+    try buffered_writer.writer().print(
+        "| flags: {c}{c}{c}{c} | a: #{x:0>2} | bc: #{x:0>4} | de: #{x:0>4} | hl: #{x:0>4} | sp: ${x:0>4} | cycles: {d}\n",
+        .{ z, n, h, c, a, bc, de, hl, regs.sp(), bus.cycles },
     );
 }
 
@@ -81,7 +87,7 @@ const Instruction = struct {
         if (self.mnemonic == .prefix_cb) {
             const inst_cb = prefixCb(info.imm);
             try inst_cb.print(alloc, info);
-            printRegisters(regs);
+            try printRegisters(regs);
             return;
         }
 
@@ -96,8 +102,8 @@ const Instruction = struct {
         else
             try std.fmt.allocPrint(alloc, "{s} {s}", .{ mnemonic, dst });
 
-        std.debug.print("{x:0>2}    | {s: <17} ", .{ opcode, mnemonic_dst_src });
-        printRegisters(regs);
+        try buffered_writer.writer().print("${x:0>4}: {x:0>2}    | {s: <17} ", .{ regs.pc(), opcode, mnemonic_dst_src });
+        try printRegisters(regs);
     }
 };
 
@@ -113,7 +119,7 @@ const PrefixCbInstruction = struct {
         const dst = try self.dst.toStr(alloc, info);
 
         const out_str = try std.fmt.allocPrint(alloc, "{s} {s}{s}", .{ mnemonic, bit, dst });
-        std.debug.print("cb {x:0>2} | {s: <17} ", .{ info.imm, out_str });
+        try buffered_writer.writer().print("cb {x:0>2} | {s: <17} ", .{ info.imm, out_str });
     }
 };
 

@@ -1,3 +1,6 @@
+const std = @import("std");
+const bus = @import("bus.zig");
+
 pub const Interrupt = enum(u8) {
     vblank = 1 << 0,
     stat = 1 << 1,

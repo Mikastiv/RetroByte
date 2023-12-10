@@ -1,9 +1,11 @@
+const std = @import("std");
 const interrupts = @import("interrupts.zig");
+const bus = @import("bus.zig");
 
 var request_interrupt = false;
 var tima_just_loaded = false;
 
-var div: u16 = 0xAC00;
+var div: u16 = 0xABCC;
 var tima: u8 = 0;
 var tma: u8 = 0;
 var tac: u8 = 0;
@@ -133,9 +135,9 @@ fn timerEnabled() bool {
 }
 
 fn incrementTima() void {
-    tima, const overflow = @addWithOverflow(tima, 1);
+    tima +%= 1;
 
-    if (overflow == 0xFF) {
+    if (tima == 0xFF) {
         tima = tma;
         interrupts.request(.timer);
     }

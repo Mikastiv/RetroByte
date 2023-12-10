@@ -112,8 +112,8 @@ pub fn init() void {
 }
 
 pub fn step() void {
-    debug.update();
-    debug.print();
+    // debug.update();
+    // debug.print();
 
     if (cpu.enabling_ime and !cpu.ime) { // EI instruction delay
         cpu.ime = true;
@@ -654,7 +654,7 @@ fn res(comptime loc: Location, comptime n: u3) void {
 }
 
 fn execute() void {
-    // debug.disassemble(bus.peek(cpu.regs.pc()), cpu.regs) catch unreachable;
+    //debug.disassemble(bus.peek(cpu.regs.pc()), cpu.regs) catch unreachable;
 
     const opcode = read8();
     if (cpu.halt_bug) {
