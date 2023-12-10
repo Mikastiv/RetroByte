@@ -115,7 +115,7 @@ pub fn step() void {
     if (cpu.enabling_ime and !cpu.ime) { // EI instruction delay
         cpu.ime = true;
         cpu.enabling_ime = false;
-        execute(read8());
+        execute();
         return;
     }
 
@@ -126,7 +126,7 @@ pub fn step() void {
         return;
     }
 
-    execute(read8());
+    execute();
 }
 
 fn handleInterrupt() void {
@@ -655,14 +655,15 @@ fn res(comptime loc: Location, comptime n: u3) void {
     loc.setValue(result);
 }
 
-fn execute(opcode: u8) void {
+fn execute() void {
+    debug.disassemble(bus.peek(cpu.regs.pc()), cpu.regs) catch unreachable;
+
+    const opcode = read8();
     if (cpu.halt_bug) {
         cpu.halt_bug = false;
         const pc = cpu.regs.pc();
         cpu.regs._16.set(.pc, pc -% 1);
     }
-
-    debug.disassemble(opcode, cpu.regs) catch unreachable;
 
     switch (opcode) {
         0x00 => nop(),
