@@ -26,7 +26,7 @@ pub fn peek(addr: u16) u8 {
         0xFF80...0xFFFE => ram.hramRead(addr),
         0xFFFF => interrupts.enabledFlags(),
         else => {
-            // std.debug.print("unimplemented read ${x:0>4}\n", .{addr});
+            std.debug.print("unimplemented read ${x:0>4}\n", .{addr});
             return 0;
         },
     };
@@ -50,8 +50,7 @@ pub fn set(addr: u16, data: u8) void {
         0xFF0F => interrupts.rawRequest(data),
         0xFF80...0xFFFE => ram.hramWrite(addr, data),
         0xFFFF => interrupts.enable(data),
-        else => {},
-        // else => std.debug.print("unimplemented write ${x:0>4}\n", .{addr}),
+        else => std.debug.print("unimplemented write ${x:0>4}\n", .{addr}),
     }
 }
 pub fn write(addr: u16, data: u8) void {
@@ -60,6 +59,6 @@ pub fn write(addr: u16, data: u8) void {
 }
 
 pub fn tick() void {
-    timer.tick();
+    for (0..4) |_| timer.tick();
     cycles +%= 1;
 }

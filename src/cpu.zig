@@ -112,37 +112,28 @@ pub fn init() void {
 }
 
 pub fn step() void {
-    // debug.update();
-    // debug.print();
-
-    if (cpu.enabling_ime and !cpu.ime) { // EI instruction delay
-        cpu.ime = true;
-        cpu.enabling_ime = false;
-        execute();
-        return;
-    }
-
-    handleInterrupt();
+    debug.update();
+    debug.print();
 
     if (cpu.halted) {
         bus.tick();
-        return;
+        if (interrupts.any())
+            cpu.halted = false;
+    } else {
+        execute();
     }
 
-    execute();
+    if (cpu.ime) handleInterrupt();
+
+    if (cpu.enabling_ime) cpu.ime = true;
 }
 
 fn handleInterrupt() void {
     if (!interrupts.any()) return;
 
-    if (cpu.halted) {
-        cpu.halted = false;
-        bus.tick();
-    }
-
-    if (!cpu.ime) return;
-
     cpu.ime = false;
+    cpu.enabling_ime = false;
+
     bus.tick();
     bus.tick();
 
@@ -654,7 +645,7 @@ fn res(comptime loc: Location, comptime n: u3) void {
 }
 
 fn execute() void {
-    //debug.disassemble(bus.peek(cpu.regs.pc()), cpu.regs) catch unreachable;
+    // debug.disassemble(bus.peek(cpu.regs.pc()), cpu.regs) catch unreachable;
 
     const opcode = read8();
     if (cpu.halt_bug) {
