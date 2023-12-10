@@ -12,11 +12,13 @@ fn printRegisters(regs: Registers) void {
     const n: u8 = if (regs.f.n) 'n' else '-';
     const h: u8 = if (regs.f.h) 'h' else '-';
     const c: u8 = if (regs.f.c) 'c' else '-';
-    std.debug.print("| flags: {c}{c}{c}{c} ", .{ z, n, h, c });
-
+    const a = regs._8.get(.a);
+    const bc = regs._16.get(.bc);
+    const de = regs._16.get(.de);
+    const hl = regs._16.get(.hl);
     std.debug.print(
-        "| a: #{x:0>2} | bc: #{x:0>4} | de: #{x:0>4} | hl: #{x:0>4} | sp: ${x:0>4} | pc: ${x:0>4} | cycles: {d}\n",
-        .{ regs._8.get(.a), regs._16.get(.bc), regs._16.get(.de), regs._16.get(.hl), regs.sp(), regs.pc(), bus.cycles },
+        "| flags: {c}{c}{c}{c} | a: #{x:0>2} | bc: #{x:0>4} | de: #{x:0>4} | hl: #{x:0>4} | sp: ${x:0>4} | pc: ${x:0>4} | cycles: {d}\n",
+        .{ z, n, h, c, a, bc, de, hl, regs.sp(), regs.pc(), bus.cycles },
     );
 }
 
@@ -196,7 +198,7 @@ const Mode = enum {
     fn toStr(self: @This(), alloc: std.mem.Allocator, info: PrintInfo) ![]const u8 {
         return switch (self) {
             .none => "",
-            .af, .bc, .de, .hl, .sp, .a, .b, .c, .d, .e, .h, .l => try std.fmt.allocPrint(alloc, "{s}", .{@tagName(self)}),
+            .af, .bc, .de, .hl, .sp, .a, .b, .c, .d, .e, .h, .l => @tagName(self),
             .addr_hl => "(hl)",
             .addr_bc => "(bc)",
             .addr_de => "(de)",
@@ -497,7 +499,7 @@ fn prefixCb(opcode: u8) PrefixCbInstruction {
         0x03, 0x0B => .e,
         0x04, 0x0C => .h,
         0x05, 0x0D => .l,
-        0x06, 0x0E => .hl,
+        0x06, 0x0E => .addr_hl,
     };
 
     const mnemonic: Mnemonic = switch (opcode) {
