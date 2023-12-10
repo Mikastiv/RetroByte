@@ -13,6 +13,19 @@ pub fn disassemble(opcode: u8, regs: Registers) !void {
     try inst.print(opcode, regs);
 }
 
+fn printRegisters(regs: Registers) void {
+    const z: u8 = if (regs.f.z) 'z' else '-';
+    const n: u8 = if (regs.f.n) 'n' else '-';
+    const h: u8 = if (regs.f.h) 'h' else '-';
+    const c: u8 = if (regs.f.c) 'c' else '-';
+    std.debug.print("| flags: {c}{c}{c}{c} ", .{ z, n, h, c });
+
+    std.debug.print(
+        "| a: #{x:0>2} | bc: #{x:0>4} | de: #{x:0>4} | hl: #{x:0>4} | sp: ${x:0>4} | pc: ${x:0>4} | cycles: {d}\n",
+        .{ regs._8.get(.a), regs._16.get(.bc), regs._16.get(.de), regs._16.get(.hl), regs.sp(), regs.pc(), bus.cycles },
+    );
+}
+
 const Instruction = struct {
     mnemonic: Mnemonic,
     dst: Mode,
@@ -22,22 +35,20 @@ const Instruction = struct {
     fn print(self: @This(), opcode: u8, regs: Registers) !void {
         const pc = regs.pc();
         const imm = bus.peek(pc);
-        const imm_s8: i8 = @bitCast(imm);
-        const imm_word = @as(u16, bus.peek(pc + 1)) << 8 | imm;
 
         var buffer: [512]u8 = undefined;
         var fixed = std.heap.FixedBufferAllocator.init(&buffer);
         const alloc = fixed.allocator();
-        // const prefix_cb = if (self.mnemonic == .prefix_cb) prefixCb(imm) else null;
-        // if (prefix_cb) |prefix| {
-        // std.debug.print("{s: <5} ", .{@tagName(prefix)});
-        // } else {
-        // std.fmt.bufPrint(&buffer, "{s: >5} ", .{});
-        // }
-        const mnemonic = self.mnemonic.toStr();
+        if (self.mnemonic == .prefix_cb) {
+            const prefix_cb = prefixCb(imm);
+            try prefix_cb.print(alloc, imm, regs);
+            printRegisters(regs);
+            return;
+        }
 
-        const dst = try self.dst.toStr(alloc, imm, imm_word, imm_s8, regs);
-        const src = try self.src.toStr(alloc, imm, imm_word, imm_s8, regs);
+        const mnemonic = self.mnemonic.toStr();
+        const dst = try self.dst.toStr(alloc, regs);
+        const src = try self.src.toStr(alloc, regs);
 
         const mnemonic_dst_src = if (self.dst == .none and self.src == .none)
             try std.fmt.allocPrint(alloc, "{s}", .{mnemonic})
@@ -46,18 +57,24 @@ const Instruction = struct {
         else
             try std.fmt.allocPrint(alloc, "{s} {s}", .{ mnemonic, dst });
 
-        std.debug.print("${x:0>2} {s: <15} ", .{ opcode, mnemonic_dst_src });
+        std.debug.print("   {x:0>2} | {s: <17} ", .{ opcode, mnemonic_dst_src });
+        printRegisters(regs);
+    }
+};
 
-        const z: u8 = if (regs.f.z) 'z' else '-';
-        const n: u8 = if (regs.f.n) 'n' else '-';
-        const h: u8 = if (regs.f.h) 'h' else '-';
-        const c: u8 = if (regs.f.c) 'c' else '-';
-        std.debug.print("| flags: {c}{c}{c}{c} ", .{ z, n, h, c });
+const PrefixCbInstruction = struct {
+    mnemonic: Mnemonic,
+    dst: Mode,
+    bit: ?u3,
+    cycles: u8 = 2,
 
-        std.debug.print(
-            "| a: ${x:0>2} | bc: ${x:0>4} | de: ${x:0>4} | hl: ${x:0>4} | sp: ${x:0>4} | pc: ${x:0>4} | cycles: {d}\n",
-            .{ regs._8.get(.a), regs._16.get(.bc), regs._16.get(.de), regs._16.get(.hl), regs.sp(), regs.pc(), bus.cycles },
-        );
+    fn print(self: @This(), alloc: std.mem.Allocator, opcode: u8, regs: Registers) !void {
+        const mnemonic = self.mnemonic.toStr();
+        const bit = if (self.bit) |bit| try std.fmt.allocPrint(alloc, "{d}, ", .{bit}) else "";
+        const dst = try self.dst.toStr(alloc, regs);
+
+        const out_str = try std.fmt.allocPrint(alloc, "{s} {s}{s}", .{ mnemonic, bit, dst });
+        std.debug.print("cb {x:0>2} | {s: <17} ", .{ opcode, out_str });
     }
 };
 
@@ -148,8 +165,21 @@ const Mode = enum {
     zero_page,
     zero_page_c,
     sp_imm_s8,
+    _00,
+    _08,
+    _10,
+    _18,
+    _20,
+    _28,
+    _30,
+    _38,
 
-    fn toStr(self: @This(), alloc: std.mem.Allocator, imm: u8, imm_word: u16, imm_s8: i8, regs: Registers) ![]const u8 {
+    // TODO: print cycles per instructions (jp,jr,etc are variable)
+    fn toStr(self: @This(), alloc: std.mem.Allocator, regs: Registers) ![]const u8 {
+        const pc = regs.pc();
+        const imm = bus.peek(pc);
+        const imm_s8: i8 = @bitCast(imm);
+        const imm_word = @as(u16, bus.peek(pc + 1)) << 8 | imm;
         return switch (self) {
             .none => "",
             .af, .bc, .de, .hl, .sp, .a, .b, .c, .d, .e, .h, .l => try std.fmt.allocPrint(alloc, "{s}", .{@tagName(self)}),
@@ -168,7 +198,15 @@ const Mode = enum {
             .addr_hld => "(hl-)",
             .zero_page => try std.fmt.allocPrint(alloc, "${x:0>4}", .{0xFF00 | @as(u16, imm)}),
             .zero_page_c => try std.fmt.allocPrint(alloc, "${x:0>4}", .{0xFF00 | @as(u16, regs._8.get(.c))}),
-            .sp_imm_s8 => try std.fmt.allocPrint(alloc, "sp+#{x:0>2} ({d})", .{ imm_word, imm_s8 }),
+            .sp_imm_s8 => try std.fmt.allocPrint(alloc, "sp+#{x:0>2} ({d})", .{ imm, imm_s8 }),
+            ._00 => try std.fmt.allocPrint(alloc, "$0000", .{}),
+            ._08 => try std.fmt.allocPrint(alloc, "$0008", .{}),
+            ._10 => try std.fmt.allocPrint(alloc, "$0010", .{}),
+            ._18 => try std.fmt.allocPrint(alloc, "$0018", .{}),
+            ._20 => try std.fmt.allocPrint(alloc, "$0020", .{}),
+            ._28 => try std.fmt.allocPrint(alloc, "$0028", .{}),
+            ._30 => try std.fmt.allocPrint(alloc, "$0030", .{}),
+            ._38 => try std.fmt.allocPrint(alloc, "$0038", .{}),
         };
     }
 };
@@ -374,7 +412,7 @@ const instructions = blk: {
     i[0xC4] = .{ .mnemonic = .call, .dst = .cond_nz, .src = .imm_addr, .cycles = 3 };
     i[0xC5] = .{ .mnemonic = .push, .dst = .bc, .src = .none, .cycles = 4 };
     i[0xC6] = .{ .mnemonic = .add, .dst = .a, .src = .imm8, .cycles = 2 };
-    i[0xC7] = .{ .mnemonic = .rst, .dst = .none, .src = .none, .cycles = 4 };
+    i[0xC7] = .{ .mnemonic = .rst, .dst = ._00, .src = .none, .cycles = 4 };
     i[0xC8] = .{ .mnemonic = .ret, .dst = .cond_z, .src = .none, .cycles = 2 };
     i[0xC9] = .{ .mnemonic = .ret, .dst = .none, .src = .none, .cycles = 4 };
     i[0xCA] = .{ .mnemonic = .jp, .dst = .cond_z, .src = .imm_addr, .cycles = 3 };
@@ -382,7 +420,7 @@ const instructions = blk: {
     i[0xCC] = .{ .mnemonic = .call, .dst = .cond_z, .src = .imm_addr, .cycles = 3 };
     i[0xCD] = .{ .mnemonic = .call, .dst = .imm_addr, .src = .none, .cycles = 6 };
     i[0xCE] = .{ .mnemonic = .adc, .dst = .a, .src = .imm8, .cycles = 2 };
-    i[0xCF] = .{ .mnemonic = .rst, .dst = .none, .src = .none, .cycles = 4 };
+    i[0xCF] = .{ .mnemonic = .rst, .dst = ._08, .src = .none, .cycles = 4 };
     i[0xD0] = .{ .mnemonic = .ret, .dst = .cond_nc, .src = .none, .cycles = 2 };
     i[0xD1] = .{ .mnemonic = .pop, .dst = .de, .src = .none, .cycles = 3 };
     i[0xD2] = .{ .mnemonic = .jp, .dst = .cond_nc, .src = .imm_addr, .cycles = 3 };
@@ -390,7 +428,7 @@ const instructions = blk: {
     i[0xD4] = .{ .mnemonic = .call, .dst = .cond_nc, .src = .imm_addr, .cycles = 3 };
     i[0xD5] = .{ .mnemonic = .push, .dst = .de, .src = .none, .cycles = 4 };
     i[0xD6] = .{ .mnemonic = .sub, .dst = .a, .src = .imm8, .cycles = 2 };
-    i[0xD7] = .{ .mnemonic = .rst, .dst = .none, .src = .none, .cycles = 4 };
+    i[0xD7] = .{ .mnemonic = .rst, .dst = ._10, .src = .none, .cycles = 4 };
     i[0xD8] = .{ .mnemonic = .ret, .dst = .cond_c, .src = .none, .cycles = 2 };
     i[0xD9] = .{ .mnemonic = .reti, .dst = .none, .src = .none, .cycles = 4 };
     i[0xDA] = .{ .mnemonic = .jp, .dst = .cond_c, .src = .imm_addr, .cycles = 3 };
@@ -398,7 +436,7 @@ const instructions = blk: {
     i[0xDC] = .{ .mnemonic = .call, .dst = .cond_c, .src = .imm_addr, .cycles = 3 };
     i[0xDD] = .{ .mnemonic = .panic, .dst = .none, .src = .none, .cycles = 1 };
     i[0xDE] = .{ .mnemonic = .sbc, .dst = .a, .src = .imm8, .cycles = 2 };
-    i[0xDF] = .{ .mnemonic = .rst, .dst = .none, .src = .none, .cycles = 4 };
+    i[0xDF] = .{ .mnemonic = .rst, .dst = ._18, .src = .none, .cycles = 4 };
     i[0xE0] = .{ .mnemonic = .ld, .dst = .zero_page, .src = .a, .cycles = 3 };
     i[0xE1] = .{ .mnemonic = .pop, .dst = .hl, .src = .none, .cycles = 3 };
     i[0xE2] = .{ .mnemonic = .ld, .dst = .zero_page_c, .src = .a, .cycles = 2 };
@@ -406,7 +444,7 @@ const instructions = blk: {
     i[0xE4] = .{ .mnemonic = .panic, .dst = .none, .src = .none, .cycles = 1 };
     i[0xE5] = .{ .mnemonic = .push, .dst = .hl, .src = .none, .cycles = 4 };
     i[0xE6] = .{ .mnemonic = .bit_and, .dst = .a, .src = .imm8, .cycles = 2 };
-    i[0xE7] = .{ .mnemonic = .rst, .dst = .none, .src = .none, .cycles = 4 };
+    i[0xE7] = .{ .mnemonic = .rst, .dst = ._20, .src = .none, .cycles = 4 };
     i[0xE8] = .{ .mnemonic = .add, .dst = .sp, .src = .imm_s8, .cycles = 4 };
     i[0xE9] = .{ .mnemonic = .jp, .dst = .hl, .src = .none, .cycles = 1 };
     i[0xEA] = .{ .mnemonic = .ld, .dst = .imm_addr, .src = .a, .cycles = 4 };
@@ -414,7 +452,7 @@ const instructions = blk: {
     i[0xEC] = .{ .mnemonic = .panic, .dst = .none, .src = .none, .cycles = 1 };
     i[0xED] = .{ .mnemonic = .panic, .dst = .none, .src = .none, .cycles = 1 };
     i[0xEE] = .{ .mnemonic = .bit_xor, .dst = .a, .src = .imm8, .cycles = 2 };
-    i[0xEF] = .{ .mnemonic = .rst, .dst = .none, .src = .none, .cycles = 4 };
+    i[0xEF] = .{ .mnemonic = .rst, .dst = ._28, .src = .none, .cycles = 4 };
     i[0xF0] = .{ .mnemonic = .ld, .dst = .a, .src = .zero_page, .cycles = 3 };
     i[0xF1] = .{ .mnemonic = .pop, .dst = .af, .src = .none, .cycles = 3 };
     i[0xF2] = .{ .mnemonic = .ld, .dst = .a, .src = .zero_page_c, .cycles = 2 };
@@ -422,7 +460,7 @@ const instructions = blk: {
     i[0xF4] = .{ .mnemonic = .panic, .dst = .none, .src = .none, .cycles = 1 };
     i[0xF5] = .{ .mnemonic = .push, .dst = .af, .src = .none, .cycles = 4 };
     i[0xF6] = .{ .mnemonic = .bit_or, .dst = .a, .src = .imm8, .cycles = 2 };
-    i[0xF7] = .{ .mnemonic = .rst, .dst = .none, .src = .none, .cycles = 4 };
+    i[0xF7] = .{ .mnemonic = .rst, .dst = ._30, .src = .none, .cycles = 4 };
     i[0xF8] = .{ .mnemonic = .ld, .dst = .hl, .src = .sp_imm_s8, .cycles = 3 };
     i[0xF9] = .{ .mnemonic = .ld, .dst = .sp, .src = .hl, .cycles = 2 };
     i[0xFA] = .{ .mnemonic = .ld, .dst = .a, .src = .imm_addr, .cycles = 4 };
@@ -430,12 +468,25 @@ const instructions = blk: {
     i[0xFC] = .{ .mnemonic = .panic, .dst = .none, .src = .none, .cycles = 1 };
     i[0xFD] = .{ .mnemonic = .panic, .dst = .none, .src = .none, .cycles = 1 };
     i[0xFE] = .{ .mnemonic = .cp, .dst = .a, .src = .imm8, .cycles = 2 };
-    i[0xFF] = .{ .mnemonic = .rst, .dst = .none, .src = .none, .cycles = 4 };
+    i[0xFF] = .{ .mnemonic = .rst, .dst = ._38, .src = .none, .cycles = 4 };
     break :blk i;
 };
 
-fn prefixCb(opcode: u8) Mnemonic {
-    return switch (opcode) {
+fn prefixCb(opcode: u8) PrefixCbInstruction {
+    const low: u4 = @truncate(opcode & 0x0F);
+
+    const dst: Mode = switch (low) {
+        0x07, 0x0F => .a,
+        0x00, 0x08 => .b,
+        0x01, 0x09 => .c,
+        0x02, 0x0A => .d,
+        0x03, 0x0B => .e,
+        0x04, 0x0C => .h,
+        0x05, 0x0D => .l,
+        0x06, 0x0E => .hl,
+    };
+
+    const mnemonic: Mnemonic = switch (opcode) {
         0x00...0x07 => .rlc,
         0x08...0x0F => .rrc,
         0x10...0x17 => .rl,
@@ -447,5 +498,23 @@ fn prefixCb(opcode: u8) Mnemonic {
         0x40...0x7F => .bit,
         0x80...0xBF => .res,
         0xC0...0xFF => .set,
+    };
+
+    const bit: ?u3 = switch (opcode) {
+        0x40...0x47, 0x80...0x87, 0xC0...0xC7 => 0,
+        0x48...0x4F, 0x88...0x8F, 0xC8...0xCF => 1,
+        0x50...0x57, 0x90...0x97, 0xD0...0xD7 => 2,
+        0x58...0x5F, 0x98...0x9F, 0xD8...0xDF => 3,
+        0x60...0x67, 0xA0...0xA7, 0xE0...0xE7 => 4,
+        0x68...0x6F, 0xA8...0xAF, 0xE8...0xEF => 5,
+        0x70...0x77, 0xB0...0xB7, 0xF0...0xF7 => 6,
+        0x78...0x7F, 0xB8...0xBF, 0xF8...0xFF => 7,
+        else => null,
+    };
+
+    return .{
+        .mnemonic = mnemonic,
+        .dst = dst,
+        .bit = bit,
     };
 }

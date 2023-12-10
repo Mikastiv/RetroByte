@@ -6,6 +6,10 @@ const interrupts = @import("interrupts.zig");
 
 pub var cycles: u64 = 0;
 
+pub fn init() void {
+    cycles = 0;
+}
+
 pub fn peek(addr: u16) u8 {
     return switch (addr) {
         0x0000...0x7FFF => rom.read(addr),

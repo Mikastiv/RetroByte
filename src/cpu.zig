@@ -108,7 +108,7 @@ var cpu: Cpu = .{};
 
 pub fn init() void {
     cpu.regs = Registers.init();
-    bus.cycles = 0;
+    bus.init();
 }
 
 pub fn step() void {
