@@ -2,6 +2,25 @@ const std = @import("std");
 const bus = @import("bus.zig");
 const Registers = @import("registers.zig").Registers;
 
+var dbg_msg_buffer = [_]u8{0} ** 1024;
+var dbg_msg_len: usize = 0;
+
+pub fn update() void {
+    if (bus.peek(0xFF02) == 0x81) {
+        const char = bus.peek(0xFF01);
+        dbg_msg_buffer[dbg_msg_len] = char;
+        dbg_msg_len += 1;
+        bus.set(0xFF02, 0);
+    }
+}
+
+pub fn print() void {
+    const stdout = std.io.getStdOut().writer();
+    const msg = dbg_msg_buffer[0..dbg_msg_len];
+    if (std.mem.indexOf(u8, msg, "Failed") != null or std.mem.indexOf(u8, msg, "Passed") != null)
+        stdout.print("{s}\n", .{msg}) catch unreachable;
+}
+
 pub fn disassemble(opcode: u8, regs: Registers) !void {
     const inst = instructions[opcode];
     try inst.print(opcode, regs);

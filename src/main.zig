@@ -9,6 +9,7 @@ var frame = Gameboy.Frame{};
 var rng = std.rand.DefaultPrng.init(0);
 
 fn runLoop(sdl: *SDLContext) !void {
+    _ = sdl;
     var event: c.SDL_Event = undefined;
     while (c.SDL_PollEvent(&event) != 0) {
         switch (event.type) {
@@ -30,16 +31,16 @@ fn runLoop(sdl: *SDLContext) !void {
     }
 
     Gameboy.step();
-    std.time.sleep(std.time.ns_per_ms * 50);
+    // std.time.sleep(std.time.ns_per_ms * 50);
 
-    for (&frame.pixels) |*p| {
-        p.* = rng.random().int(u8);
-    }
+    // for (&frame.pixels) |*p| {
+    //     p.* = rng.random().int(u8);
+    // }
 
-    try sdl.clearFramebuffer();
-    try sdl.copyToBackbuffer(&frame);
-    try sdl.renderCopy();
-    sdl.renderPresent();
+    // try sdl.clearFramebuffer();
+    // try sdl.copyToBackbuffer(&frame);
+    // try sdl.renderCopy();
+    // sdl.renderPresent();
 }
 
 fn emscriptenLoopWrapper(arg: ?*anyopaque) callconv(.C) void {

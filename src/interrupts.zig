@@ -34,7 +34,7 @@ pub fn handled(interrupt: Interrupt) void {
 }
 
 pub fn any() bool {
-    return requests & enabled != 0;
+    return requests & enabled & 0x1F != 0;
 }
 
 pub fn highestPriority() Interrupt {

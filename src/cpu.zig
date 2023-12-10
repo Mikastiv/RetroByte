@@ -112,6 +112,9 @@ pub fn init() void {
 }
 
 pub fn step() void {
+    debug.update();
+    debug.print();
+
     if (cpu.enabling_ime and !cpu.ime) { // EI instruction delay
         cpu.ime = true;
         cpu.enabling_ime = false;
@@ -441,23 +444,31 @@ fn jpHl() void {
 }
 
 fn daa() void {
-    var a = cpu.regs._8.get(.a);
+    var adjust: u8 = 0;
+    var carry = false;
 
+    var a = cpu.regs._8.get(.a);
     const c = cpu.regs.f.c;
     const n = cpu.regs.f.n;
     const h = cpu.regs.f.h;
 
-    if (!n) { // after addition
-        if (c or a > 0x99) a +%= 0x60;
-        if (h or (a & 0x0F) > 0x09) a +%= 0x06;
-    } else { // after substraction
-        if (c) a -%= 0x60;
-        if (h) a -%= 0x06;
+    if (h or (!n and a & 0x0F > 0x09)) {
+        adjust = 0x06;
+    }
+
+    if (c or (!n and a > 0x99)) {
+        adjust |= 0x60;
+        carry = true;
+    }
+
+    if (n) {
+        a -%= adjust;
+    } else {
+        a +%= adjust;
     }
 
     cpu.regs._8.set(.a, a);
-
-    cpu.regs.f.c = !n and (c or a > 0x99);
+    cpu.regs.f.c = carry;
     cpu.regs.f.z = a == 0;
     cpu.regs.f.h = false;
 }
@@ -656,7 +667,7 @@ fn res(comptime loc: Location, comptime n: u3) void {
 }
 
 fn execute() void {
-    debug.disassemble(bus.peek(cpu.regs.pc()), cpu.regs) catch unreachable;
+    // debug.disassemble(bus.peek(cpu.regs.pc()), cpu.regs) catch unreachable;
 
     const opcode = read8();
     if (cpu.halt_bug) {

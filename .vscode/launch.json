@@ -9,7 +9,7 @@
             "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/zig-out/bin/retrobyte",
-            "args": ["rom/tetris.gb"],
+            "args": ["tests/blargg/cpu_instrs/individual/01-special.gb"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
