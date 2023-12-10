@@ -294,28 +294,16 @@ fn dec16(comptime reg: Reg16) void {
     bus.tick();
 }
 
-fn addOverflow(comptime T: type, a: T, b: T, cy: u1) struct { T, u1 } {
-    const type_info = @typeInfo(T);
-    if (type_info != .Int) {
-        @compileError("expected integer type");
-    }
-
-    const x = @addWithOverflow(a, b);
-    const result = @addWithOverflow(x[0], cy);
-
-    return .{ result[0], result[1] | x[1] };
-}
-
 fn aluAdd(value: u8, cy: u1) void {
     const a = cpu.regs._8.get(.a);
-    const result, const carry = addOverflow(u8, a, value, cy);
+    const result: u16 = @as(u16, a) + @as(u16, value) + cy;
 
-    cpu.regs.f.c = carry != 0;
-    cpu.regs.f.h = addOverflow(u4, @truncate(a), @truncate(value), cy)[1] != 0;
+    cpu.regs.f.c = result > 0xFF;
+    cpu.regs.f.h = (a & 0x0F) + (value & 0x0F) + cy > 0x0F;
     cpu.regs.f.n = false;
     cpu.regs.f.z = result & 0xFF == 0;
 
-    cpu.regs._8.set(.a, result);
+    cpu.regs._8.set(.a, @truncate(result));
 }
 
 fn add(comptime loc: Location) void {
@@ -333,8 +321,8 @@ fn addSp() void {
     const value: u16 = @bitCast(signed);
     const sp = cpu.regs.sp();
 
-    cpu.regs.f.c = addOverflow(u8, @truncate(sp), @truncate(value), 0)[1] != 0;
-    cpu.regs.f.h = addOverflow(u4, @truncate(sp), @truncate(value), 0)[1] != 0;
+    cpu.regs.f.c = (sp & 0x00FF) + (value & 0x00FF) > 0x00FF;
+    cpu.regs.f.h = (sp & 0x000F) + (value & 0x000F) > 0x000F;
     cpu.regs.f.n = false;
     cpu.regs.f.z = false;
 
@@ -347,12 +335,11 @@ fn addSp() void {
 fn add16(comptime reg: Reg16) void {
     const value = cpu.regs._16.get(reg);
     const hl = cpu.regs._16.get(.hl);
-    const result, const carry = addOverflow(u16, hl, value, 0);
+    const result, const carry = @addWithOverflow(hl, value);
 
     cpu.regs.f.c = carry != 0;
-    cpu.regs.f.h = addOverflow(u12, @truncate(hl), @truncate(value), 0)[1] != 0;
+    cpu.regs.f.h = (hl & 0x0FFF) + (value & 0x0FFF) > 0x0FFF;
     cpu.regs.f.n = false;
-    cpu.regs.f.z = result == 0;
 
     cpu.regs._16.set(.hl, result);
 
