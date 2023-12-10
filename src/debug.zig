@@ -213,14 +213,14 @@ const Mode = enum {
             .zero_page => try std.fmt.allocPrint(alloc, "${x:0>4}", .{0xFF00 | @as(u16, info.imm)}),
             .zero_page_c => try std.fmt.allocPrint(alloc, "${x:0>4}", .{0xFF00 | @as(u16, info.reg_c)}),
             .sp_imm_s8 => try std.fmt.allocPrint(alloc, "sp+#{x:0>2} ({d})", .{ info.imm, info.imm_s8 }),
-            ._00 => try std.fmt.allocPrint(alloc, "$0000", .{}),
-            ._08 => try std.fmt.allocPrint(alloc, "$0008", .{}),
-            ._10 => try std.fmt.allocPrint(alloc, "$0010", .{}),
-            ._18 => try std.fmt.allocPrint(alloc, "$0018", .{}),
-            ._20 => try std.fmt.allocPrint(alloc, "$0020", .{}),
-            ._28 => try std.fmt.allocPrint(alloc, "$0028", .{}),
-            ._30 => try std.fmt.allocPrint(alloc, "$0030", .{}),
-            ._38 => try std.fmt.allocPrint(alloc, "$0038", .{}),
+            ._00 => "$0000",
+            ._08 => "$0008",
+            ._10 => "$0010",
+            ._18 => "$0018",
+            ._20 => "$0020",
+            ._28 => "$0028",
+            ._30 => "$0030",
+            ._38 => "$0038",
         };
     }
 };
