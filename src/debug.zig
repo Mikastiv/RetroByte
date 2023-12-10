@@ -31,7 +31,7 @@ const PrintInfo = struct {
         const pc = regs.pc() +% 1;
         const imm = bus.peek(pc);
         const imm_s8: i8 = @bitCast(imm);
-        const imm_word = bus.peek(pc +% 1);
+        const imm_word = @as(u16, bus.peek(pc +% 1)) << 8 | imm;
         const reg_c = regs._8.get(.c);
 
         return .{
