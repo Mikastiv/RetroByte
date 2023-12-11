@@ -3,6 +3,7 @@ const registers = @import("registers.zig");
 const interrupts = @import("interrupts.zig");
 const bus = @import("bus.zig");
 const debug = @import("debug.zig");
+const options = @import("options");
 
 const Registers = registers.Registers;
 const Flags = registers.Flags;
@@ -645,7 +646,7 @@ fn res(comptime loc: Location, comptime n: u3) void {
 }
 
 fn execute() void {
-    // debug.disassemble(bus.peek(cpu.regs.pc()), cpu.regs) catch unreachable;
+    if (options.disassemble) debug.disassemble(bus.peek(cpu.regs.pc()), cpu.regs) catch unreachable;
 
     const opcode = read8();
     if (cpu.halt_bug) {

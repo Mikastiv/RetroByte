@@ -5,6 +5,10 @@ pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const output_disassembly = b.option(bool, "disassemble", "print instructions to stderr") orelse false;
+    const build_options = b.addOptions();
+    build_options.addOption(bool, "disassemble", output_disassembly);
+
     switch (target.getOsTag()) {
         .emscripten => {
             // get emscripten sdk path
@@ -62,6 +66,7 @@ pub fn build(b: *std.Build) !void {
             const sdl2 = sdl2_dep.artifact("SDL2");
 
             exe.linkLibrary(sdl2);
+            exe.addOptions("options", build_options);
 
             b.installArtifact(exe);
 
