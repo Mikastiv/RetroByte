@@ -1,6 +1,7 @@
 const Self = @This();
 const std = @import("std");
 const c = @import("c.zig");
+const bus = @import("bus.zig");
 const Gameboy = @import("Gameboy.zig");
 
 const SDLError = error{
@@ -9,9 +10,12 @@ const SDLError = error{
     SDLRendererCreationFailed,
     SDLTextureCreationFailed,
     SDLSetDrawColorFailed,
-    SDLClearFramebufferFailed,
+    SDLRenderClearFailed,
     SDLTextureLockFailed,
     SDLRenderCopyFailed,
+    SDLSurfaceCreationFailed,
+    SDLFillRectFailed,
+    SDLTextureUpdateFailed,
 };
 
 fn printSDLError(comptime caller: []const u8) void {
@@ -20,7 +24,12 @@ fn printSDLError(comptime caller: []const u8) void {
 
 window: *c.SDL_Window,
 renderer: *c.SDL_Renderer,
-backbuffer: *c.SDL_Texture,
+texture: *c.SDL_Texture,
+
+debug_window: *c.SDL_Window,
+debug_renderer: *c.SDL_Renderer,
+debug_texture: *c.SDL_Texture,
+debug_surface: *c.SDL_Surface,
 
 pub fn init(
     window_title: [:0]const u8,
@@ -57,15 +66,58 @@ pub fn init(
         return error.SDLTextureCreationFailed;
     };
 
+    const debug_window = c.SDL_CreateWindow(
+        "Tiles debug",
+        c.SDL_WINDOWPOS_UNDEFINED,
+        c.SDL_WINDOWPOS_UNDEFINED,
+        @intCast(window_width),
+        @intCast(window_height),
+        0,
+    ) orelse {
+        return error.SDLRendererCreationFailed;
+    };
+
+    const debug_renderer = c.SDL_CreateRenderer(debug_window, -1, c.SDL_RENDERER_ACCELERATED) orelse {
+        return error.SDLRendererCreationFailed;
+    };
+
+    const debug_texture = c.SDL_CreateTexture(
+        debug_renderer,
+        c.SDL_PIXELFORMAT_RGB24,
+        c.SDL_TEXTUREACCESS_STREAMING,
+        24 * 8,
+        16 * 8,
+    ) orelse {
+        return error.SDLTextureCreationFailed;
+    };
+
+    const debug_surface = c.SDL_CreateRGBSurface(0, 24 * 8, 16 * 8, 24, 0x00FF0000, 0x0000FF00, 0x000000FF, 0) orelse {
+        return error.SDLSurfaceCreationFailed;
+    };
+
+    var x: i32 = undefined;
+    var y: i32 = undefined;
+    c.SDL_GetWindowPosition(window, &x, &y);
+    c.SDL_SetWindowPosition(debug_window, x + @as(i32, @intCast(window_width)), y);
+
+    if (c.SDL_SetRenderDrawColor(renderer, 0, 0, 0, c.SDL_ALPHA_OPAQUE) < 0)
+        return error.SDLRenderClearFailed;
+    if (c.SDL_SetRenderDrawColor(debug_renderer, 0, 0, 0, c.SDL_ALPHA_OPAQUE) < 0)
+        return error.SDLRenderClearFailed;
+
     return .{
         .window = window,
         .renderer = renderer,
-        .backbuffer = texture,
+        .texture = texture,
+        .debug_window = debug_window,
+        .debug_renderer = debug_renderer,
+        .debug_texture = debug_texture,
+        .debug_surface = debug_surface,
     };
 }
 
 pub fn deinit(self: Self) void {
-    c.SDL_DestroyTexture(self.backbuffer);
+    c.SDL_DestroyTexture(self.texture);
     c.SDL_DestroyRenderer(self.renderer);
     c.SDL_DestroyWindow(self.window);
     c.SDL_Quit();
@@ -81,14 +133,14 @@ pub fn setDrawColor(self: Self, r: u8, g: u8, b: u8) SDLError!void {
 pub fn clearFramebuffer(self: Self) SDLError!void {
     if (c.SDL_RenderClear(self.renderer) < 0) {
         printSDLError(@src().fn_name);
-        return error.SDLClearFramebufferFailed;
+        return error.SDLRenderClearFailed;
     }
 }
 
 pub fn copyToBackbuffer(self: Self, frame: *const Gameboy.Frame) !void {
     var pixel_ptr: ?*anyopaque = undefined;
     var pitch: c_int = undefined;
-    if (c.SDL_LockTexture(self.backbuffer, null, &pixel_ptr, &pitch) < 0) {
+    if (c.SDL_LockTexture(self.texture, null, &pixel_ptr, &pitch) < 0) {
         errdefer printSDLError(@src().fn_name);
         return error.SDLTextureLockFailed;
     }
@@ -100,11 +152,11 @@ pub fn copyToBackbuffer(self: Self, frame: *const Gameboy.Frame) !void {
         pixels[i] = frame.pixels[i];
     }
 
-    c.SDL_UnlockTexture(self.backbuffer);
+    c.SDL_UnlockTexture(self.texture);
 }
 
 pub fn renderCopy(self: Self) SDLError!void {
-    if (c.SDL_RenderCopy(self.renderer, self.backbuffer, null, null) < 0) {
+    if (c.SDL_RenderCopy(self.renderer, self.texture, null, null) < 0) {
         printSDLError(@src().fn_name);
         return error.SDLRenderCopyFailed;
     }
@@ -112,4 +164,68 @@ pub fn renderCopy(self: Self) SDLError!void {
 
 pub fn renderPresent(self: Self) void {
     c.SDL_RenderPresent(self.renderer);
+}
+
+const tile_colors = [4]u24{ 0xFFFFFF, 0xAAAAAA, 0x555555, 0x000000 };
+
+fn displayTile(surface: *c.SDL_Surface, tile_num: u16, x: i32, y: i32) !void {
+    var rect: c.SDL_Rect = undefined;
+    rect.w = 1;
+    rect.h = 1;
+
+    var tile_y: u16 = 0;
+    while (tile_y < 16) : (tile_y += 2) {
+        var lo = bus.peek(0x8000 + (tile_num * 16) + tile_y);
+        var hi = bus.peek(0x8000 + (tile_num * 16) + tile_y + 1);
+
+        for (0..8) |bit| {
+            const l: u2 = @intCast(lo & 1);
+            const h: u2 = @intCast(hi & 1);
+            const color = h << 1 | l;
+
+            lo >>= 1;
+            hi >>= 1;
+
+            rect.x = x + @as(i32, @intCast(bit));
+            rect.y = y + @divTrunc(@as(i32, @intCast(tile_y)), 2);
+
+            if (c.SDL_FillRect(surface, &rect, tile_colors[color]) < 0)
+                return error.SDLFillRectFailed;
+        }
+    }
+}
+
+pub fn updateDebugWindow(self: Self) SDLError!void {
+    var rect = c.SDL_Rect{ .x = 0, .y = 0, .w = self.debug_surface.w, .h = self.debug_surface.h };
+    if (c.SDL_FillRect(self.debug_surface, &rect, 0x111111) < 0)
+        return error.SDLFillRectFailed;
+
+    const addr = 0x8000;
+    _ = addr;
+
+    // var x_draw: i32 = 0;
+    // _ = x_draw;
+    // var y_draw: i32 = 0;
+    // _ = y_draw;
+    // var tile_num: u16 = 0;
+    // _ = tile_num;
+    try displayTile(self.debug_surface, 0, 0, 0);
+    //384 tiles, 24 x 16
+    // for (0..24) |y| {
+    //     for (0..16) |x| {
+    // try displayTile(self.debug_surface, tile_num, x_draw + @as(i32, @intCast(x)), y_draw + @as(i32, @intCast(y)));
+    //         // display tile
+    //         x_draw += 8;
+    //         tile_num += 1;
+    //     }
+    //     x_draw = 0;
+    //     y_draw += 8;
+    // }
+    if (c.SDL_UpdateTexture(self.debug_texture, null, self.debug_surface.pixels, self.debug_surface.pitch) < 0)
+        return error.SDLTextureUpdateFailed;
+    if (c.SDL_RenderClear(self.debug_renderer) < 0)
+        return error.SDLRenderClearFailed;
+    if (c.SDL_RenderCopy(self.debug_renderer, self.debug_texture, null, null) < 0)
+        return error.SDLRenderCopyFailed;
+    c.SDL_RenderPresent(self.debug_renderer);
 }

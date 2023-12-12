@@ -1,5 +1,6 @@
 const std = @import("std");
 const ram = @import("ram.zig");
+const vram = @import("vram.zig");
 const rom = @import("rom.zig");
 const timer = @import("timer.zig");
 const interrupts = @import("interrupts.zig");
@@ -15,6 +16,7 @@ pub fn init() void {
 pub fn peek(addr: u16) u8 {
     return switch (addr) {
         0x0000...0x7FFF => rom.read(addr),
+        0x8000...0x9FFF => vram.read(addr),
         0xC000...0xFDFF => ram.wramRead(addr),
         0xFF01 => serial_data[0],
         0xFF02 => serial_data[1],
@@ -40,6 +42,7 @@ pub fn read(addr: u16) u8 {
 pub fn set(addr: u16, data: u8) void {
     switch (addr) {
         0x0000...0x7FFF => rom.write(addr, data),
+        0x8000...0x9FFF => vram.write(addr, data),
         0xC000...0xFDFF => ram.wramWrite(addr, data),
         0xFF01 => serial_data[0] = data,
         0xFF02 => serial_data[1] = data,

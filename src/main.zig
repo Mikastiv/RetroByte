@@ -9,7 +9,6 @@ var frame = Gameboy.Frame{};
 var rng = std.rand.DefaultPrng.init(0);
 
 fn runLoop(sdl: *SDLContext) !void {
-    _ = sdl;
     var event: c.SDL_Event = undefined;
     while (c.SDL_PollEvent(&event) != 0) {
         switch (event.type) {
@@ -33,9 +32,12 @@ fn runLoop(sdl: *SDLContext) !void {
     Gameboy.step();
     // std.time.sleep(std.time.ns_per_ms * 100);
 
-    // for (&frame.pixels) |*p| {
-    //     p.* = rng.random().int(u8);
+    // const tiles = vram.getTiles();
+    // for (&frame.pixels, 0..) |*p, i| {
+    //     p.* = tiles.pixels[i];
     // }
+
+    try sdl.updateDebugWindow();
 
     // try sdl.clearFramebuffer();
     // try sdl.copyToBackbuffer(&frame);
@@ -54,7 +56,7 @@ pub fn main() !u8 {
     const stderr = std.io.getStdErr().writer();
 
     var sdl = try SDLContext.init("RetroByte", 800, 600);
-    try sdl.setDrawColor(0, 0, 0);
+    // try sdl.setDrawColor(0, 0, 0);
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
