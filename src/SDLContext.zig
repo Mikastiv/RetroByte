@@ -141,16 +141,13 @@ pub fn copyToBackbuffer(self: Self, frame: *const Gameboy.Frame) !void {
     var pixel_ptr: ?*anyopaque = undefined;
     var pitch: c_int = undefined;
     if (c.SDL_LockTexture(self.texture, null, &pixel_ptr, &pitch) < 0) {
-        errdefer printSDLError(@src().fn_name);
+        printSDLError(@src().fn_name);
         return error.SDLTextureLockFailed;
     }
 
     const ptr: [*]u8 = @ptrCast(pixel_ptr);
     const pixels = ptr[0..Gameboy.Frame.size];
-
-    for (0..Gameboy.Frame.size) |i| {
-        pixels[i] = frame.pixels[i];
-    }
+    @memcpy(pixels, frame.pixels);
 
     c.SDL_UnlockTexture(self.texture);
 }
@@ -196,10 +193,6 @@ fn displayTile(surface: *c.SDL_Surface, tile_num: u16, x: i32, y: i32) !void {
 }
 
 pub fn updateDebugWindow(self: Self) SDLError!void {
-    var rect = c.SDL_Rect{ .x = 0, .y = 0, .w = self.debug_surface.w, .h = self.debug_surface.h };
-    if (c.SDL_FillRect(self.debug_surface, &rect, 0x111111) < 0)
-        return error.SDLFillRectFailed;
-
     const addr = 0x8000;
     _ = addr;
 
@@ -219,8 +212,22 @@ pub fn updateDebugWindow(self: Self) SDLError!void {
         x_draw = 0;
         y_draw += 8;
     }
-    if (c.SDL_UpdateTexture(self.debug_texture, null, self.debug_surface.pixels, self.debug_surface.pitch) < 0)
-        return error.SDLTextureUpdateFailed;
+
+    var pixel_ptr: ?*anyopaque = undefined;
+    var pitch: c_int = undefined;
+    if (c.SDL_LockTexture(self.debug_texture, null, &pixel_ptr, &pitch) < 0) {
+        errdefer printSDLError(@src().fn_name);
+        return error.SDLTextureLockFailed;
+    }
+
+    const ptr: [*]u8 = @ptrCast(pixel_ptr);
+    const surface_pitch: usize = @intCast(self.debug_surface.pitch);
+    const surface_height: usize = @intCast(self.debug_surface.h);
+    const pixels = ptr[0 .. surface_pitch * surface_height];
+    const surface_ptr: [*]u8 = @ptrCast(self.debug_surface.pixels);
+    @memcpy(pixels, surface_ptr);
+    c.SDL_UnlockTexture(self.debug_texture);
+
     if (c.SDL_RenderClear(self.debug_renderer) < 0)
         return error.SDLRenderClearFailed;
     if (c.SDL_RenderCopy(self.debug_renderer, self.debug_texture, null, null) < 0)
