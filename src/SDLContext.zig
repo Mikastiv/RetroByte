@@ -85,13 +85,13 @@ pub fn init(
         debug_renderer,
         c.SDL_PIXELFORMAT_RGB24,
         c.SDL_TEXTUREACCESS_STREAMING,
-        24 * 8,
         16 * 8,
+        24 * 8,
     ) orelse {
         return error.SDLTextureCreationFailed;
     };
 
-    const debug_surface = c.SDL_CreateRGBSurface(0, 24 * 8, 16 * 8, 24, 0x00FF0000, 0x0000FF00, 0x000000FF, 0) orelse {
+    const debug_surface = c.SDL_CreateRGBSurface(0, 16 * 8, 24 * 8, 24, 0x00FF0000, 0x0000FF00, 0x000000FF, 0) orelse {
         return error.SDLSurfaceCreationFailed;
     };
 
@@ -186,7 +186,7 @@ fn displayTile(surface: *c.SDL_Surface, tile_num: u16, x: i32, y: i32) !void {
             lo >>= 1;
             hi >>= 1;
 
-            rect.x = x + @as(i32, @intCast(bit));
+            rect.x = x + (7 - @as(i32, @intCast(bit)));
             rect.y = y + @divTrunc(@as(i32, @intCast(tile_y)), 2);
 
             if (c.SDL_FillRect(surface, &rect, tile_colors[color]) < 0)
@@ -203,24 +203,22 @@ pub fn updateDebugWindow(self: Self) SDLError!void {
     const addr = 0x8000;
     _ = addr;
 
-    // var x_draw: i32 = 0;
-    // _ = x_draw;
-    // var y_draw: i32 = 0;
-    // _ = y_draw;
-    // var tile_num: u16 = 0;
-    // _ = tile_num;
-    try displayTile(self.debug_surface, 0, 0, 0);
-    //384 tiles, 24 x 16
-    // for (0..24) |y| {
-    //     for (0..16) |x| {
-    // try displayTile(self.debug_surface, tile_num, x_draw + @as(i32, @intCast(x)), y_draw + @as(i32, @intCast(y)));
-    //         // display tile
-    //         x_draw += 8;
-    //         tile_num += 1;
-    //     }
-    //     x_draw = 0;
-    //     y_draw += 8;
-    // }
+    var x_draw: i32 = 0;
+    var y_draw: i32 = 0;
+    var tile_num: u16 = 0;
+    // 384 tiles, 24 x 16
+    for (0..24) |y| {
+        _ = y;
+        for (0..16) |x| {
+            _ = x;
+            try displayTile(self.debug_surface, tile_num, x_draw, y_draw);
+            // display tile
+            x_draw += 8;
+            tile_num += 1;
+        }
+        x_draw = 0;
+        y_draw += 8;
+    }
     if (c.SDL_UpdateTexture(self.debug_texture, null, self.debug_surface.pixels, self.debug_surface.pitch) < 0)
         return error.SDLTextureUpdateFailed;
     if (c.SDL_RenderClear(self.debug_renderer) < 0)

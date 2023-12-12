@@ -13,6 +13,9 @@ pub fn init() void {
     cycles = 0;
 }
 
+var tmp1: u8 = 0;
+var tmp: u8 = 0;
+
 pub fn peek(addr: u16) u8 {
     return switch (addr) {
         0x0000...0x7FFF => rom.read(addr),
@@ -25,6 +28,7 @@ pub fn peek(addr: u16) u8 {
         0xFF06 => timer.tmaRead(),
         0xFF07 => timer.tacRead(),
         0xFF0F => interrupts.requestedFlags(),
+        0xFF44 => tmp,
         0xFF80...0xFFFE => ram.hramRead(addr),
         0xFFFF => interrupts.enabledFlags(),
         else => {
@@ -63,5 +67,11 @@ pub fn write(addr: u16, data: u8) void {
 
 pub fn tick() void {
     for (0..4) |_| timer.tick();
+    tmp1 += 1;
+    if (tmp1 > 200) {
+        tmp1 = 0;
+        tmp += 1;
+        tmp %= 153;
+    }
     cycles +%= 1;
 }
