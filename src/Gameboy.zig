@@ -46,5 +46,16 @@ pub fn init(allocator: std.mem.Allocator, rom_filepath: []const u8) !void {
 }
 
 pub fn step() void {
-    cpu.step();
+    _ = cpu.step();
+}
+
+var executed_cycles: u128 = 0;
+pub fn run() void {
+    while (true) {
+        executed_cycles += cpu.step();
+        if (@as(f64, @floatFromInt(executed_cycles)) > cpu.freq_ms) {
+            std.time.sleep(std.time.ns_per_ms);
+            executed_cycles = 0;
+        }
+    }
 }

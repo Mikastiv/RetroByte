@@ -10,6 +10,9 @@ const Flags = registers.Flags;
 const Reg16 = registers.Reg16;
 const Reg8 = registers.Reg8;
 
+pub const freq = 1048576.0;
+pub const freq_ms = freq / 1000.0;
+
 const RotateOp = enum { rl, rlc, rr, rrc };
 const JumpCond = enum { c, z, nc, nz, always };
 
@@ -112,9 +115,11 @@ pub fn init() void {
     bus.init();
 }
 
-pub fn step() void {
-    debug.update();
-    debug.print();
+pub fn step() u128 {
+    // debug.update();
+    // debug.print();
+
+    const cycles_start = bus.cycles;
 
     if (cpu.halted) {
         bus.tick();
@@ -127,6 +132,8 @@ pub fn step() void {
     if (cpu.ime) handleInterrupt();
 
     if (cpu.enabling_ime) cpu.ime = true;
+
+    return bus.cycles - cycles_start;
 }
 
 fn handleInterrupt() void {

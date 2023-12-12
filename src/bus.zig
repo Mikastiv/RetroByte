@@ -5,7 +5,7 @@ const rom = @import("rom.zig");
 const timer = @import("timer.zig");
 const interrupts = @import("interrupts.zig");
 
-pub var cycles: u64 = 0;
+pub var cycles: u128 = 0;
 
 var serial_data = [2]u8{ 0, 0 };
 
@@ -32,7 +32,7 @@ pub fn peek(addr: u16) u8 {
         0xFF80...0xFFFE => ram.hramRead(addr),
         0xFFFF => interrupts.enabledFlags(),
         else => {
-            std.debug.print("unimplemented read ${x:0>4}\n", .{addr});
+            //std.debug.print("unimplemented read ${x:0>4}\n", .{addr});
             return 0;
         },
     };
@@ -57,7 +57,8 @@ pub fn set(addr: u16, data: u8) void {
         0xFF0F => interrupts.rawRequest(data),
         0xFF80...0xFFFE => ram.hramWrite(addr, data),
         0xFFFF => interrupts.enable(data),
-        else => std.debug.print("unimplemented write ${x:0>4}\n", .{addr}),
+        // else => std.debug.print("unimplemented write ${x:0>4}\n", .{addr}),
+        else => {},
     }
 }
 pub fn write(addr: u16, data: u8) void {

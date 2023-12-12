@@ -29,7 +29,7 @@ fn runLoop(sdl: *SDLContext) !void {
         }
     }
 
-    Gameboy.step();
+    // Gameboy.step();
     // std.time.sleep(std.time.ns_per_ms * 100);
 
     // const tiles = vram.getTiles();
@@ -74,6 +74,7 @@ pub fn main() !u8 {
     if (builtin.os.tag == .emscripten) {
         c.emscripten_set_main_loop_arg(emscriptenLoopWrapper, @ptrCast(&sdl), 0, 1);
     } else {
+        _ = try std.Thread.spawn(.{}, Gameboy.run, .{});
         while (running) {
             try runLoop(&sdl);
         }
