@@ -59,15 +59,20 @@ pub fn build(b: *std.Build) !void {
                 .optimize = optimize,
             });
 
-            const sdl2_dep = b.dependency("SDL2", .{
-                .target = target,
-                .optimize = optimize,
-            });
-            const sdl2 = sdl2_dep.artifact("SDL2");
+            if (target.getOsTag() == .linux) {
+                exe.linkSystemLibrary("SDL2");
+                exe.linkLibC();
+            } else {
+                const sdl2_dep = b.dependency("SDL2", .{
+                    .target = target,
+                    .optimize = optimize,
+                });
+                const sdl2 = sdl2_dep.artifact("SDL2");
 
-            exe.linkLibrary(sdl2);
+                exe.linkLibrary(sdl2);
+            }
+
             exe.addOptions("options", build_options);
-
             b.installArtifact(exe);
 
             const run_cmd = b.addRunArtifact(exe);
