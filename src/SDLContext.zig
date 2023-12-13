@@ -189,7 +189,7 @@ fn displayTile(surface: *c.SDL_Surface, tile_num: u16, x: i32, y: i32) !void {
         var lo = bus.peek(0x8000 + (tile_num * 16) + tile_y);
         var hi = bus.peek(0x8000 + (tile_num * 16) + tile_y + 1);
 
-        for (0..8) |bit| {
+        inline for (0..8) |bit| {
             const l: u2 = @intCast(lo & 1);
             const h: u2 = @intCast(hi & 1);
             const color = h << 1 | l;
@@ -211,10 +211,8 @@ pub fn updateDebugWindow(self: Self) SDLError!void {
     var y_draw: i32 = 0;
     var tile_num: u16 = 0;
     // 384 tiles, 24 x 16
-    for (0..tiles_per_col) |y| {
-        _ = y;
-        for (0..tiles_per_row) |x| {
-            _ = x;
+    inline for (0..tiles_per_col) |_| {
+        inline for (0..tiles_per_row) |_| {
             try displayTile(self.debug_surface, tile_num, x_draw, y_draw);
             // display tile
             x_draw += pixels_per_tile_row;
