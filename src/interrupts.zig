@@ -12,6 +12,11 @@ pub const Interrupt = enum(u8) {
 var requests: u8 = 0;
 var enabled: u8 = 0;
 
+pub fn init() void {
+    requests = 0;
+    enabled = 0;
+}
+
 pub fn enabledFlags() u8 {
     return enabled;
 }

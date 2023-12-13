@@ -179,7 +179,9 @@ pub fn renderPresent(self: Self) void {
 
 const tile_colors = [4]u24{ 0xFFFFFF, 0xAAAAAA, 0x555555, 0x000000 };
 
-fn displayTile(surface: *c.SDL_Surface, tile_num: u16, x: i32, y: i32) !void {
+fn displayTile(surface: *c.SDL_Surface, tile_num: u16, x: i32, y: i32) SDLError!void {
+    errdefer printSDLError(@src().fn_name);
+
     var rect: c.SDL_Rect = undefined;
     rect.w = 1;
     rect.h = 1;
@@ -207,6 +209,8 @@ fn displayTile(surface: *c.SDL_Surface, tile_num: u16, x: i32, y: i32) !void {
 }
 
 pub fn updateDebugWindow(self: Self) SDLError!void {
+    errdefer printSDLError(@src().fn_name);
+
     var x_draw: i32 = 0;
     var y_draw: i32 = 0;
     var tile_num: u16 = 0;
@@ -224,10 +228,8 @@ pub fn updateDebugWindow(self: Self) SDLError!void {
 
     var pixel_ptr: ?*anyopaque = undefined;
     var pitch: c_int = undefined;
-    if (c.SDL_LockTexture(self.debug_texture, null, &pixel_ptr, &pitch) < 0) {
-        errdefer printSDLError(@src().fn_name);
+    if (c.SDL_LockTexture(self.debug_texture, null, &pixel_ptr, &pitch) < 0)
         return error.SDLTextureLockFailed;
-    }
 
     const ptr: [*]u8 = @ptrCast(pixel_ptr);
     const surface_pitch: usize = @intCast(self.debug_surface.pitch);

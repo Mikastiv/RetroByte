@@ -17,7 +17,7 @@ const RotateOp = enum { rl, rlc, rr, rrc };
 const JumpCond = enum { c, z, nc, nz, always };
 
 const Cpu = struct {
-    regs: Registers = undefined,
+    regs: Registers = Registers.init(),
     halted: bool = false,
     halt_bug: bool = false,
     ime: bool = false,
@@ -112,6 +112,10 @@ var cpu: Cpu = .{};
 
 pub fn init() void {
     cpu.regs = Registers.init();
+    cpu.ime = false;
+    cpu.enabling_ime = false;
+    cpu.halt_bug = false;
+    cpu.halted = false;
     bus.init();
 }
 

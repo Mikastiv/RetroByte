@@ -10,6 +10,13 @@ var tima: u8 = 0;
 var tma: u8 = 0;
 var tac: u8 = 0;
 
+pub fn init() void {
+    div = 0xAC00;
+    tima = 0;
+    tma = 0;
+    tac = 0;
+}
+
 fn tacMask() u16 {
     const mode: u2 = @truncate(tac);
     return switch (mode) {
@@ -58,22 +65,22 @@ pub fn tick() void {
     }
 }
 
-pub fn divRead() u8 {
+fn divRead() u8 {
     return @truncate(div >> 8);
 }
 
-pub fn divWrite() void {
+fn divWrite() void {
     if (timerEnabled() and divOutputBit()) {
         incrementTima();
     }
     div = 0;
 }
 
-pub fn tacRead() u8 {
+fn tacRead() u8 {
     return 0xF8 | (tac & 0x07);
 }
 
-pub fn tacWrite(value: u8) void {
+fn tacWrite(value: u8) void {
     const old_bit = divOutputBit();
     const old_enable = timerEnabled();
     tac = value;
@@ -92,26 +99,52 @@ pub fn tacWrite(value: u8) void {
     if (increment) incrementTima();
 }
 
-pub fn tmaRead() u8 {
+fn tmaRead() u8 {
     return tma;
 }
 
-pub fn tmaWrite(value: u8) void {
+fn tmaWrite(value: u8) void {
     tma = value;
     if (tima_just_loaded) {
         tima = value;
     }
 }
 
-pub fn timaRead() u8 {
+fn timaRead() u8 {
     return tima;
 }
 
-pub fn timaWrite(value: u8) void {
+fn timaWrite(value: u8) void {
     if (!tima_just_loaded) {
         tima = value;
     }
     if (request_interrupt) {
         request_interrupt = false;
+    }
+}
+
+fn validateTimerAddress(addr: u16) void {
+    std.debug.assert(addr >= 0xFF04 and addr <= 0xFF07);
+}
+
+pub fn read(addr: u16) u8 {
+    validateTimerAddress(addr);
+    return switch (addr) {
+        0xFF04 => divRead(),
+        0xFF05 => timaRead(),
+        0xFF06 => tmaRead(),
+        0xFF07 => tacRead(),
+        else => unreachable,
+    };
+}
+
+pub fn write(addr: u16, data: u8) void {
+    validateTimerAddress(addr);
+    switch (addr) {
+        0xFF04 => divWrite(),
+        0xFF05 => timaWrite(data),
+        0xFF06 => tmaWrite(data),
+        0xFF07 => tacWrite(data),
+        else => unreachable,
     }
 }

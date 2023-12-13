@@ -2,6 +2,9 @@ const std = @import("std");
 const cpu = @import("cpu.zig");
 const rom = @import("rom.zig");
 const debug = @import("debug.zig");
+const bus = @import("bus.zig");
+const joypad = @import("joypad.zig");
+const timer = @import("timer.zig");
 
 pub const screen_width = 160;
 pub const screen_height = 144;
@@ -40,6 +43,9 @@ pub fn init(allocator: std.mem.Allocator, rom_filepath: []const u8) !void {
     const bytes = try file.readToEndAlloc(allocator, std.math.maxInt(usize));
     rom.init(bytes);
     cpu.init();
+    bus.init();
+    timer.init();
+    joypad.init();
     debug.init();
 
     try rom.printHeader();

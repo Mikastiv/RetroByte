@@ -8,6 +8,10 @@ pub fn RegisterArray(comptime Reg: type, comptime T: type) type {
         const len = @typeInfo(Reg).Enum.fields.len;
         data: [len]T,
 
+        pub fn init() @This() {
+            return .{ .data = std.mem.zeroes([len]T) };
+        }
+
         pub fn get(self: *const @This(), comptime reg: Reg) T {
             return self.data[@intFromEnum(reg)];
         }
@@ -27,13 +31,11 @@ pub const Flags = packed struct {
 };
 
 pub const Registers = extern union {
-    const Self = @This();
-
     _16: RegisterArray(Reg16, u16),
     _8: RegisterArray(Reg8, u8),
     f: Flags,
 
-    pub fn init() Self {
+    pub fn init() @This() {
         var regs: RegisterArray(Reg16, u16) = undefined;
         regs.set(.af, 0x0100);
         regs.set(.bc, 0xFF13);
@@ -47,25 +49,25 @@ pub const Registers = extern union {
         };
     }
 
-    pub fn pc(self: *const Self) u16 {
+    pub fn pc(self: *const @This()) u16 {
         return self._16.get(.pc);
     }
 
-    pub fn incPc(self: *Self) void {
+    pub fn incPc(self: *@This()) void {
         const value = self._16.get(.pc);
         self._16.set(.pc, value +% 1);
     }
 
-    pub fn sp(self: *const Self) u16 {
+    pub fn sp(self: *const @This()) u16 {
         return self._16.get(.sp);
     }
 
-    pub fn incSp(self: *Self) void {
+    pub fn incSp(self: *@This()) void {
         const value = self._16.get(.sp);
         self._16.set(.sp, value +% 1);
     }
 
-    pub fn decSp(self: *Self) void {
+    pub fn decSp(self: *@This()) void {
         const value = self._16.get(.sp);
         self._16.set(.sp, value -% 1);
     }
