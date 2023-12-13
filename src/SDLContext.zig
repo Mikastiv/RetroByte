@@ -4,6 +4,11 @@ const c = @import("c.zig");
 const bus = @import("bus.zig");
 const Gameboy = @import("Gameboy.zig");
 
+const tiles_per_row = 16;
+const tiles_per_col = 24;
+const pixels_per_tile_row = 8;
+const pixels_per_tile_col = 8;
+
 const SDLError = error{
     SDLInitFailed,
     SDLWindowCreationFailed,
@@ -85,13 +90,22 @@ pub fn init(
         debug_renderer,
         c.SDL_PIXELFORMAT_RGB24,
         c.SDL_TEXTUREACCESS_STREAMING,
-        16 * 8,
-        24 * 8,
+        tiles_per_row * pixels_per_tile_row,
+        tiles_per_col * pixels_per_tile_col,
     ) orelse {
         return error.SDLTextureCreationFailed;
     };
 
-    const debug_surface = c.SDL_CreateRGBSurface(0, 16 * 8, 24 * 8, 24, 0x00FF0000, 0x0000FF00, 0x000000FF, 0) orelse {
+    const debug_surface = c.SDL_CreateRGBSurface(
+        0,
+        tiles_per_row * pixels_per_tile_row,
+        tiles_per_col * pixels_per_tile_col,
+        24,
+        0x00FF0000,
+        0x0000FF00,
+        0x000000FF,
+        0,
+    ) orelse {
         return error.SDLSurfaceCreationFailed;
     };
 
@@ -193,20 +207,17 @@ fn displayTile(surface: *c.SDL_Surface, tile_num: u16, x: i32, y: i32) !void {
 }
 
 pub fn updateDebugWindow(self: Self) SDLError!void {
-    const addr = 0x8000;
-    _ = addr;
-
     var x_draw: i32 = 0;
     var y_draw: i32 = 0;
     var tile_num: u16 = 0;
     // 384 tiles, 24 x 16
-    for (0..24) |y| {
+    for (0..tiles_per_col) |y| {
         _ = y;
-        for (0..16) |x| {
+        for (0..tiles_per_row) |x| {
             _ = x;
             try displayTile(self.debug_surface, tile_num, x_draw, y_draw);
             // display tile
-            x_draw += 8;
+            x_draw += pixels_per_tile_row;
             tile_num += 1;
         }
         x_draw = 0;

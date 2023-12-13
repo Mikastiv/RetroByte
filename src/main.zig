@@ -43,6 +43,8 @@ fn runLoop(sdl: *SDLContext) !void {
     // try sdl.copyToBackbuffer(&frame);
     // try sdl.renderCopy();
     // sdl.renderPresent();
+
+    std.time.sleep(std.time.ns_per_ms);
 }
 
 fn emscriptenLoopWrapper(arg: ?*anyopaque) callconv(.C) void {
