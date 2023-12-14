@@ -55,7 +55,7 @@ pub fn run() void {
         executed_cycles += cpu.step();
         if (@as(f64, @floatFromInt(executed_cycles)) > cpu.freq_ms) {
             std.time.sleep(std.time.ns_per_ms);
-            executed_cycles = 0;
+            executed_cycles -= @intFromFloat(cpu.freq_ms);
         }
     }
 }
