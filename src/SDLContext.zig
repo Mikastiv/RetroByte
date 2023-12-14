@@ -4,6 +4,11 @@ const c = @import("c.zig");
 const bus = @import("bus.zig");
 const Gameboy = @import("Gameboy.zig");
 
+const tiles_per_row = 16;
+const tiles_per_col = 24;
+const pixels_per_tile_row = 8;
+const pixels_per_tile_col = 8;
+
 const SDLError = error{
     SDLInitFailed,
     SDLWindowCreationFailed,
@@ -85,13 +90,22 @@ pub fn init(
         debug_renderer,
         c.SDL_PIXELFORMAT_RGB24,
         c.SDL_TEXTUREACCESS_STREAMING,
-        16 * 8,
-        24 * 8,
+        tiles_per_row * pixels_per_tile_row,
+        tiles_per_col * pixels_per_tile_col,
     ) orelse {
         return error.SDLTextureCreationFailed;
     };
 
-    const debug_surface = c.SDL_CreateRGBSurface(0, 16 * 8, 24 * 8, 24, 0x00FF0000, 0x0000FF00, 0x000000FF, 0) orelse {
+    const debug_surface = c.SDL_CreateRGBSurface(
+        0,
+        tiles_per_row * pixels_per_tile_row,
+        tiles_per_col * pixels_per_tile_col,
+        24,
+        0x00FF0000,
+        0x0000FF00,
+        0x000000FF,
+        0,
+    ) orelse {
         return error.SDLSurfaceCreationFailed;
     };
 
@@ -165,7 +179,9 @@ pub fn renderPresent(self: Self) void {
 
 const tile_colors = [4]u24{ 0xFFFFFF, 0xAAAAAA, 0x555555, 0x000000 };
 
-fn displayTile(surface: *c.SDL_Surface, tile_num: u16, x: i32, y: i32) !void {
+fn displayTile(surface: *c.SDL_Surface, tile_num: u16, x: i32, y: i32) SDLError!void {
+    errdefer printSDLError(@src().fn_name);
+
     var rect: c.SDL_Rect = undefined;
     rect.w = 1;
     rect.h = 1;
@@ -175,7 +191,7 @@ fn displayTile(surface: *c.SDL_Surface, tile_num: u16, x: i32, y: i32) !void {
         var lo = bus.peek(0x8000 + (tile_num * 16) + tile_y);
         var hi = bus.peek(0x8000 + (tile_num * 16) + tile_y + 1);
 
-        for (0..8) |bit| {
+        inline for (0..8) |bit| {
             const l: u2 = @intCast(lo & 1);
             const h: u2 = @intCast(hi & 1);
             const color = h << 1 | l;
@@ -193,20 +209,17 @@ fn displayTile(surface: *c.SDL_Surface, tile_num: u16, x: i32, y: i32) !void {
 }
 
 pub fn updateDebugWindow(self: Self) SDLError!void {
-    const addr = 0x8000;
-    _ = addr;
+    errdefer printSDLError(@src().fn_name);
 
     var x_draw: i32 = 0;
     var y_draw: i32 = 0;
     var tile_num: u16 = 0;
     // 384 tiles, 24 x 16
-    for (0..24) |y| {
-        _ = y;
-        for (0..16) |x| {
-            _ = x;
+    inline for (0..tiles_per_col) |_| {
+        inline for (0..tiles_per_row) |_| {
             try displayTile(self.debug_surface, tile_num, x_draw, y_draw);
             // display tile
-            x_draw += 8;
+            x_draw += pixels_per_tile_row;
             tile_num += 1;
         }
         x_draw = 0;
@@ -215,10 +228,8 @@ pub fn updateDebugWindow(self: Self) SDLError!void {
 
     var pixel_ptr: ?*anyopaque = undefined;
     var pitch: c_int = undefined;
-    if (c.SDL_LockTexture(self.debug_texture, null, &pixel_ptr, &pitch) < 0) {
-        errdefer printSDLError(@src().fn_name);
+    if (c.SDL_LockTexture(self.debug_texture, null, &pixel_ptr, &pitch) < 0)
         return error.SDLTextureLockFailed;
-    }
 
     const ptr: [*]u8 = @ptrCast(pixel_ptr);
     const surface_pitch: usize = @intCast(self.debug_surface.pitch);
