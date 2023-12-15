@@ -37,6 +37,7 @@ pub fn peek(addr: u16) u8 {
         0xFF01 => serial_data[0],
         0xFF02 => serial_data[1],
         0xFF04...0xFF07 => timer.read(addr),
+        0xFF0F => interrupts.requestedFlags(),
         0xFF40...0xFF4B => lcd.read(addr),
         0xFF80...0xFFFE => hram[addr & hram_mask],
         0xFFFF => interrupts.enabledFlags(),

@@ -9,8 +9,8 @@ pub const Interrupt = enum(u8) {
     joypad = 1 << 4,
 };
 
-var requests: u8 = 0;
-var enabled: u8 = 0;
+var requests: u8 = undefined;
+var enabled: u8 = undefined;
 
 pub fn init() void {
     requests = 0;
