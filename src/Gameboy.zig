@@ -5,6 +5,8 @@ const debug = @import("debug.zig");
 const bus = @import("bus.zig");
 const joypad = @import("joypad.zig");
 const timer = @import("timer.zig");
+const lcd = @import("lcd.zig");
+const ppu = @import("ppu.zig");
 
 pub const screen_width = 160;
 pub const screen_height = 144;
@@ -47,6 +49,8 @@ pub fn init(allocator: std.mem.Allocator, rom_filepath: []const u8) !void {
     timer.init();
     joypad.init();
     debug.init();
+    ppu.init();
+    lcd.init();
 
     try rom.printHeader();
 }
