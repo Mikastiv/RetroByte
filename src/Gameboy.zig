@@ -63,8 +63,9 @@ var executed_cycles: u128 = 0;
 pub fn run() void {
     while (true) {
         executed_cycles += cpu.step();
-        if (@as(f64, @floatFromInt(executed_cycles)) > cpu.freq_ms * 2) {
-            std.time.sleep(std.time.ns_per_ms * 2);
+        // TODO: better timing code (windows sleep is not accurate)
+        if (@as(f64, @floatFromInt(executed_cycles)) > cpu.freq_ms) {
+            std.time.sleep(std.time.ns_per_ms);
             executed_cycles -= @intFromFloat(cpu.freq_ms);
         }
     }
