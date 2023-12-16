@@ -32,7 +32,7 @@ pub fn peek(addr: u16) u8 {
         0x0000...0x7FFF => rom.read(addr),
         0x8000...0x9FFF => vram[addr & vram_mask],
         0xC000...0xFDFF => wram[addr & wram_mask],
-        0xFE00...0xFE9F => ppu.oamRead(addr),
+        0xFE00...0xFE9F => ppu.oamRead(addr & 0xFF),
         0xFEA0...0xFEFF => 0, // prohibited region
         0xFF00 => joypad.read(),
         0xFF01 => serial_data[0],
@@ -59,7 +59,7 @@ pub fn set(addr: u16, data: u8) void {
         0x0000...0x7FFF => rom.write(addr, data),
         0x8000...0x9FFF => vram[addr & vram_mask] = data,
         0xC000...0xFDFF => wram[addr & wram_mask] = data,
-        0xFE00...0xFE9F => ppu.oamWrite(addr, data),
+        0xFE00...0xFE9F => ppu.oamWrite(addr & 0xFF, data),
         0xFEA0...0xFEFF => {}, // prohibited region
         0xFF00 => joypad.write(data),
         0xFF01 => serial_data[0] = data,

@@ -32,7 +32,8 @@ pub fn tick() void {
     }
 
     const data = bus.read(page | byte);
-    ppu.oamWrite(0xFE00 | @as(u16, byte), data);
+    // write on the same cycle
+    ppu.oamWrite(byte, data);
     byte += 1;
 
     active = byte < 0xA0;
