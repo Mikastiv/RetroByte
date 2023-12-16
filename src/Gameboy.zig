@@ -5,7 +5,6 @@ const debug = @import("debug.zig");
 const bus = @import("bus.zig");
 const joypad = @import("joypad.zig");
 const timer = @import("timer.zig");
-const lcd = @import("lcd.zig");
 const ppu = @import("ppu.zig");
 const dma = @import("dma.zig");
 
@@ -13,7 +12,7 @@ pub const screen_width = 160;
 pub const screen_height = 144;
 
 pub const Frame = struct {
-    pixels: [size]u8 = std.mem.zeroes([size]u8),
+    pixels: [size]u8,
 
     pub const Color = struct {
         r: u8,
@@ -35,7 +34,7 @@ pub const Frame = struct {
     }
 
     pub fn clear(self: *Frame) void {
-        self.pixels = std.mem.zeroes([size]u8);
+        @memset(&self.pixels, 0);
     }
 };
 
@@ -51,7 +50,6 @@ pub fn init(allocator: std.mem.Allocator, rom_filepath: []const u8) !void {
     joypad.init();
     debug.init();
     ppu.init();
-    lcd.init();
     dma.init();
 
     try rom.printHeader();
@@ -65,8 +63,8 @@ var executed_cycles: u128 = 0;
 pub fn run() void {
     while (true) {
         executed_cycles += cpu.step();
-        if (@as(f64, @floatFromInt(executed_cycles)) > cpu.freq_ms) {
-            std.time.sleep(std.time.ns_per_ms);
+        if (@as(f64, @floatFromInt(executed_cycles)) > cpu.freq_ms * 2) {
+            std.time.sleep(std.time.ns_per_ms * 2);
             executed_cycles -= @intFromFloat(cpu.freq_ms);
         }
     }

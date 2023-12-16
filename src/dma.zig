@@ -32,9 +32,10 @@ pub fn tick() void {
         return;
     }
 
-    const data = bus.read(page | byte);
-    // write on the same cycle
+    // read & write in 1 cycle
+    const data = bus.peek(page | byte);
     ppu.oamWrite(byte, data);
+
     byte += 1;
 
     active = byte < 0xA0;

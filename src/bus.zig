@@ -3,7 +3,6 @@ const rom = @import("rom.zig");
 const timer = @import("timer.zig");
 const interrupts = @import("interrupts.zig");
 const joypad = @import("joypad.zig");
-const lcd = @import("lcd.zig");
 const ppu = @import("ppu.zig");
 const dma = @import("dma.zig");
 
@@ -36,9 +35,9 @@ pub fn peek(addr: u16) u8 {
         0xFF02 => serial_data[1],
         0xFF04...0xFF07 => timer.read(addr),
         0xFF0F => interrupts.requestedFlags(),
-        0xFF40...0xFF45 => lcd.read(addr),
+        0xFF40...0xFF45 => ppu.read(addr),
         0xFF46 => dma.read(),
-        0xFF47...0xFF4B => lcd.read(addr),
+        0xFF47...0xFF4B => ppu.read(addr),
         0xFF80...0xFFFE => hram[addr & hram_mask],
         0xFFFF => interrupts.enabledFlags(),
         else => {
@@ -65,9 +64,9 @@ pub fn set(addr: u16, data: u8) void {
         0xFF02 => serial_data[1] = data,
         0xFF04...0xFF07 => timer.write(addr, data),
         0xFF0F => interrupts.rawRequest(data),
-        0xFF40...0xFF45 => lcd.write(addr, data),
+        0xFF40...0xFF45 => ppu.write(addr, data),
         0xFF46 => dma.write(data),
-        0xFF47...0xFF4B => lcd.write(addr, data),
+        0xFF47...0xFF4B => ppu.write(addr, data),
         0xFF80...0xFFFE => hram[addr & hram_mask] = data,
         0xFFFF => interrupts.enable(data),
         else => std.debug.print("unimplemented write ${x:0>4}\n", .{addr}),
@@ -81,6 +80,7 @@ pub fn write(addr: u16, data: u8) void {
 pub fn tick() void {
     for (0..4) |_| {
         timer.tick();
+        ppu.tick();
     }
     dma.tick();
     cycles +%= 1;
