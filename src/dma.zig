@@ -9,6 +9,7 @@ var delay: u8 = undefined;
 pub fn init() void {
     active = false;
     byte = 0;
+    page = 0;
     delay = 0;
 }
 

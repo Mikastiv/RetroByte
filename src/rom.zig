@@ -119,6 +119,7 @@ fn titleSize(flag: u8) u8 {
         return 0x10;
 }
 
+// TODO: fix licensee tables
 const cartridge_types = blk: {
     var array: [0x100][]const u8 = undefined;
     array[0x00] = "ROM ONLY";
