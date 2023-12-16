@@ -42,7 +42,7 @@ fn printRegisters(regs: Registers) !void {
     const de = regs._16.get(.de);
     const hl = regs._16.get(.hl);
     try buffered_writer.writer().print(
-        "| flags: {c}{c}{c}{c} | a: #{x:0>2} | bc: #{x:0>4} | de: #{x:0>4} | hl: #{x:0>4} | sp: ${x:0>4} | cycles: {d}\n",
+        "| flags: {c}{c}{c}{c} | a: ${x:0>2} | bc: ${x:0>4} | de: ${x:0>4} | hl: ${x:0>4} | sp: ${x:0>4} | cycles: {d}\n",
         .{ z, n, h, c, a, bc, de, hl, regs.sp(), bus.cycles },
     );
 }
@@ -103,7 +103,7 @@ const Instruction = struct {
         else
             try std.fmt.allocPrint(alloc, "{s} {s}", .{ mnemonic, dst });
 
-        try buffered_writer.writer().print("${x:0>4}: {x:0>2}    | {s: <18} ", .{ regs.pc(), opcode, mnemonic_dst_src });
+        try buffered_writer.writer().print("${x:0>4}: {x:0>2}    | {s: <20} ", .{ regs.pc(), opcode, mnemonic_dst_src });
         try printRegisters(regs);
         try buffered_writer.flush();
     }
@@ -121,7 +121,7 @@ const PrefixCbInstruction = struct {
         const dst = try self.dst.toStr(alloc, info);
 
         const out_str = try std.fmt.allocPrint(alloc, "{s} {s}{s}", .{ mnemonic, bit, dst });
-        try buffered_writer.writer().print("cb {x:0>2} | {s: <18} ", .{ info.imm, out_str });
+        try buffered_writer.writer().print("cb {x:0>2} | {s: <20} ", .{ info.imm, out_str });
     }
 };
 
@@ -229,19 +229,19 @@ const Mode = enum {
             .addr_hl => "(hl)",
             .addr_bc => "(bc)",
             .addr_de => "(de)",
-            .imm8 => try std.fmt.allocPrint(alloc, "${x:0>2}", .{info.imm}),
+            .imm8 => try std.fmt.allocPrint(alloc, "#${x:0>2}", .{info.imm}),
             .imm_addr => try std.fmt.allocPrint(alloc, "(${x:0>4})", .{info.imm_word}),
             .imm16 => try std.fmt.allocPrint(alloc, "${x:0>4}", .{info.imm_word}),
-            .imm_s8 => try std.fmt.allocPrint(alloc, "${x:0>2} ({d})", .{ info.imm, info.imm_s8 }),
+            .imm_s8 => try std.fmt.allocPrint(alloc, "#${x:0>2} ({d})", .{ info.imm, info.imm_s8 }),
             .cond_nz => "nz",
             .cond_nc => "nc",
             .cond_z => "z",
             .cond_c => "c",
             .addr_hli => "(hl+)",
             .addr_hld => "(hl-)",
-            .zero_page => try std.fmt.allocPrint(alloc, "${x:0>4}", .{0xFF00 | @as(u16, info.imm)}),
-            .zero_page_c => try std.fmt.allocPrint(alloc, "${x:0>4}", .{0xFF00 | @as(u16, info.reg_c)}),
-            .sp_imm_s8 => try std.fmt.allocPrint(alloc, "sp+${x:0>2} ({d})", .{ info.imm, info.imm_s8 }),
+            .zero_page => try std.fmt.allocPrint(alloc, "(${x:0>4})", .{0xFF00 | @as(u16, info.imm)}),
+            .zero_page_c => try std.fmt.allocPrint(alloc, "(${x:0>4})", .{0xFF00 | @as(u16, info.reg_c)}),
+            .sp_imm_s8 => try std.fmt.allocPrint(alloc, "sp+#${x:0>2} ({d})", .{ info.imm, info.imm_s8 }),
             ._00 => "$0000",
             ._08 => "$0008",
             ._10 => "$0010",

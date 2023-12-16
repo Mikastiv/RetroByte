@@ -5,6 +5,7 @@ const interrupts = @import("interrupts.zig");
 const joypad = @import("joypad.zig");
 const lcd = @import("lcd.zig");
 const ppu = @import("ppu.zig");
+const dma = @import("dma.zig");
 
 pub var cycles: u128 = 0;
 
@@ -77,6 +78,9 @@ pub fn write(addr: u16, data: u8) void {
 }
 
 pub fn tick() void {
-    for (0..4) |_| timer.tick();
+    for (0..4) |_| {
+        timer.tick();
+    }
+    dma.tick();
     cycles +%= 1;
 }

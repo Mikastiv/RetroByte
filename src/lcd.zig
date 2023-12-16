@@ -1,4 +1,5 @@
 const std = @import("std");
+const dma = @import("dma.zig");
 
 const Control = packed union {
     bit: packed struct {
@@ -53,6 +54,7 @@ pub fn read(addr: u16) u8 {
         0xFF41 => registers.stat.raw & 0x7F,
         0xFF44 => registers.ly,
         0xFF45 => registers.lyc,
+        0xFF46 => dma.read(),
         else => 0,
     };
 }
@@ -63,6 +65,7 @@ pub fn write(addr: u16, data: u8) void {
         0xFF40 => registers.ctrl.raw = data,
         0xFF41 => registers.stat.raw = (registers.stat.raw & 0x07) | (data & 0x78),
         0xFF45 => registers.lyc = data,
+        0xFF46 => dma.write(data),
         else => {},
     }
 }

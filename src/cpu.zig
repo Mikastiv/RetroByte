@@ -20,6 +20,7 @@ const Cpu = struct {
     regs: Registers = Registers.init(),
     halted: bool = false,
     halt_bug: bool = false,
+    skip_interrupts: bool = false,
     ime: bool = false,
     enabling_ime: bool = false,
 };
@@ -108,36 +109,44 @@ const Location = enum {
     }
 };
 
-var cpu: Cpu = .{};
+var cpu: Cpu = undefined;
 
 pub fn init() void {
-    cpu.regs = Registers.init();
-    cpu.ime = false;
-    cpu.enabling_ime = false;
-    cpu.halt_bug = false;
-    cpu.halted = false;
+    cpu = .{};
     bus.init();
 }
 
+fn elapsedCycles(start: u128) u128 {
+    return bus.cycles - start;
+}
+
 pub fn step() u128 {
-    // debug.update();
-    // debug.print();
+    debug.update();
+    debug.print();
 
     const cycles_start = bus.cycles;
 
     if (cpu.halted) {
         bus.tick();
-        if (interrupts.any())
+        if (interrupts.any()) {
             cpu.halted = false;
+            if (cpu.skip_interrupts) {
+                cpu.skip_interrupts = false;
+                execute();
+            }
+        }
     } else {
         execute();
     }
 
     if (cpu.ime) handleInterrupt();
 
-    if (cpu.enabling_ime) cpu.ime = true;
+    if (cpu.enabling_ime) {
+        cpu.ime = true;
+        cpu.enabling_ime = false;
+    }
 
-    return bus.cycles - cycles_start;
+    return elapsedCycles(cycles_start);
 }
 
 fn handleInterrupt() void {
@@ -527,8 +536,13 @@ fn stop() void {
 }
 
 fn halt() void {
-    cpu.halt_bug = !cpu.ime and interrupts.any();
-    cpu.halted = !cpu.halt_bug; // if halt bug occurs, cpu is not halted
+    if (cpu.ime) {
+        cpu.halted = true;
+    } else {
+        cpu.halt_bug = interrupts.any();
+        cpu.halted = !cpu.halt_bug;
+        cpu.skip_interrupts = cpu.halted;
+    }
 }
 
 fn ei() void {
