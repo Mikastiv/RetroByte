@@ -170,6 +170,7 @@ fn pixelTransferTick() void {
     if (line_dot >= 80 + 172) {
         // TODO: interrupt 1 cycle before switch to hblank
         regs.stat.bit.mode = .hblank;
+        fetcher.reset();
     }
 }
 
@@ -266,11 +267,11 @@ const Fetcher = struct {
     const State = enum { tile, data0, data1, idle, push };
 
     state: State = .tile,
-    x: u32 = 0,
-    map_x: u32 = 0,
-    map_y: u32 = 0,
-    tile_y: u32 = 0,
-    tile: u8 = 0,
+    x: u16 = 0,
+    map_x: u16 = 0,
+    map_y: u16 = 0,
+    tile_y: u16 = 0,
+    tile: u16 = 0,
     byte0: u8 = 0,
     byte1: u8 = 0,
 
@@ -306,6 +307,10 @@ const Fetcher = struct {
                 self.state = .tile;
             },
         }
+    }
+
+    fn reset(self: *@This()) void {
+        self.* = .{};
     }
 };
 
