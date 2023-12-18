@@ -34,11 +34,11 @@ const colors = [4]u24{ 0xFFFFFF, 0xAAAAAA, 0x555555, 0x000000 };
 
 const Control = packed union {
     bit: packed struct {
-        bg_on: bool,
+        bgw_on: bool,
         obj_on: bool,
         obj_size: bool,
         bg_map: bool,
-        bg_win_data: bool,
+        bgw_data: bool,
         win_on: bool,
         win_map: bool,
         lcd_on: bool,
@@ -53,8 +53,8 @@ const Control = packed union {
         return if (self.bit.bg_map) 0x9C00 else 0x9800;
     }
 
-    fn bgWinTileDataArea(self: @This()) u16 {
-        return if (self.bit.bg_win_data) 0x8000 else 0x8800;
+    fn bgwTileDataArea(self: @This()) u16 {
+        return if (self.bit.bgw_data) 0x8000 else 0x8800;
     }
 
     fn winTileMapArea(self: @This()) u16 {
@@ -97,6 +97,8 @@ const Registers = struct {
 pub var regs: Registers = undefined;
 var bg_colors: [4]u24 = undefined;
 var obj_colors: [2][4]u24 = undefined;
+var fetcher: Fetcher = undefined;
+var fifo: Fifo = undefined;
 
 pub fn init() void {
     framebuffers[0].clear();
@@ -106,6 +108,9 @@ pub fn init() void {
 
     regs = .{};
     regs.stat.bit.mode = .oam_scan;
+
+    fetcher = .{};
+    fifo = .{};
 
     for (colors, 0..) |color, i| {
         bg_colors[i] = color;
@@ -161,6 +166,7 @@ fn oamScanTick() void {
 }
 
 fn pixelTransferTick() void {
+    fetcher.tick();
     if (line_dot >= 80 + 172) {
         // TODO: interrupt 1 cycle before switch to hblank
         regs.stat.bit.mode = .hblank;
@@ -255,3 +261,58 @@ fn incrementLy() void {
         regs.stat.bit.match_flag = false;
     }
 }
+
+const Fetcher = struct {
+    const State = enum { tile, data0, data1, idle, push };
+
+    state: State = .tile,
+    x: u32 = 0,
+    map_x: u32 = 0,
+    map_y: u32 = 0,
+    tile_y: u32 = 0,
+    tile: u8 = 0,
+    byte0: u8 = 0,
+    byte1: u8 = 0,
+
+    fn tick(self: *@This()) void {
+        self.map_x = regs.scx + self.x;
+        self.map_y = regs.ly + regs.scy;
+        self.tile_y = (self.map_y % 8) * 2;
+        switch (self.state) {
+            .tile => if (line_dot & 1 == 0) {
+                if (regs.ctrl.bit.bgw_on) {
+                    // TODO: change impl when adding vram blocking
+                    self.tile = vramRead(regs.ctrl.bgTileMapArea() + self.map_x / 8 + self.map_y / 8 * 32); // 32 tiles per row
+                    // tiles start at 128 if lcdc.4 is off
+                    if (!regs.ctrl.bit.bgw_data) self.tile += 128;
+                }
+                self.state = .data0;
+                self.x += 8;
+            },
+            .data0 => if (line_dot & 1 == 0) {
+                // TODO: change impl when adding vram blocking
+                self.byte0 = vramRead(regs.ctrl.bgwTileDataArea() + self.tile * 16 + self.tile_y);
+                self.state = .data1;
+            },
+            .data1 => if (line_dot & 1 == 0) {
+                // TODO: change impl when adding vram blocking
+                self.byte1 = vramRead(regs.ctrl.bgwTileDataArea() + self.tile * 16 + self.tile_y + 1);
+                self.state = .idle;
+            },
+            .idle => if (line_dot & 1 == 0) {
+                self.state = .push;
+            },
+            .push => if (fifo.addPixels()) {
+                self.state = .tile;
+            },
+        }
+    }
+};
+
+const Fifo = struct {
+    size: u8 = 0,
+
+    fn addPixels(self: @This()) bool {
+        return self.size < 8;
+    }
+};
