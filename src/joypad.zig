@@ -31,33 +31,30 @@ pub const GbButton = enum {
     down,
 };
 
-const select_buttons = 1 << 4;
-const select_dpad = 1 << 5;
+const select_dpad = 1 << 4;
+const select_buttons = 1 << 5;
 
-var buttons_state: Buttons = .{ .raw = 0xF };
-var dpad_state: DPad = .{ .raw = 0xF };
-var select: u8 = 0;
+var buttons_state: Buttons = undefined;
+var dpad_state: DPad = undefined;
+var select: u8 = undefined;
 
 pub fn init() void {
     buttons_state = .{ .raw = 0xF };
     dpad_state = .{ .raw = 0xF };
-    select = 0;
+    select = 0x30;
 }
 
 pub fn read() u8 {
-    var value: u8 = 0;
+    var value: u8 = 0xC0 | select;
 
-    if (select & select_buttons == 0) {
-        value |= buttons_state.raw;
-    }
-    if (select & select_dpad == 0) {
-        value |= dpad_state.raw;
-    }
+    if (select & select_buttons == 0) value |= buttons_state.raw;
+    if (select & select_dpad == 0) value |= dpad_state.raw;
+    if (select == 0x30) value |= 0xF;
 
     // 11SS BBBB
     // S: select
     // B: buttons
-    return 0xC0 | select | value;
+    return value;
 }
 
 pub fn write(data: u8) void {

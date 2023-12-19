@@ -23,7 +23,7 @@
             "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/zig-out/bin/retrobyte",
-            "args": ["tests/blargg/halt_bug.gb"],
+            "args": ["rom/tetris.gb"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
