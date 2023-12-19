@@ -216,11 +216,9 @@ pub fn updateDebugWindow(self: Self) SDLError!void {
     var tile_num: u16 = 0;
     // 384 tiles, 24 x 16
     inline for (0..tiles_per_col) |j| {
-        _ = j;
         inline for (0..tiles_per_row) |i| {
-            _ = i;
-            // const tile_id = bus.peek(0x9800 + j * 32 + i);
-            try displayTile(self.debug_surface, tile_num, x_draw, y_draw);
+            const tile_id = bus.peek(0x9800 + j * 32 + i);
+            try displayTile(self.debug_surface, tile_id, x_draw, y_draw);
             // display tile
             x_draw += pixels_per_tile_row;
             tile_num += 1;

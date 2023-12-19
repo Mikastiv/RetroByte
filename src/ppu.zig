@@ -294,20 +294,20 @@ const Fetcher = struct {
     byte1: u8 = 0,
 
     fn tick(self: *@This()) void {
-        // TODO: scroll
-        self.map_x = self.x;
+        // TODO: fine x scroll
+        self.map_x = (self.x +% (regs.scx / 8)) & 0x1F;
         self.map_y = regs.ly +% regs.scy;
         self.tile_y = self.map_y % 8;
         switch (self.state) {
             .tile => if (line_dot & 1 == 0) {
                 if (regs.ctrl.bit.bgw_on) {
                     // TODO: change impl when adding vram blocking
-                    self.tile = vramRead(regs.ctrl.bgTileMapArea() + self.map_x / 8 + self.map_y / 8 * 32); // 32 tiles per row
+                    self.tile = vramRead(regs.ctrl.bgTileMapArea() + self.map_x + self.map_y / 8 * 32); // 32 tiles per row
                     // tiles start at 128 if lcdc.4 is off
                     if (!regs.ctrl.bit.bgw_data) self.tile +%= 128;
                 }
                 self.state = .data0;
-                self.x += 8;
+                self.x += 1;
             },
             .data0 => if (line_dot & 1 == 0) {
                 // TODO: change impl when adding vram blocking
