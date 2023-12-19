@@ -17,6 +17,10 @@ fn runLoop(sdl: *SDLContext) !void {
                 running = false;
                 break;
             },
+            c.SDL_WINDOWEVENT => if (event.window.event == c.SDL_WINDOWEVENT_CLOSE) {
+                running = false;
+                break;
+            },
             c.SDL_KEYDOWN => {
                 switch (event.key.keysym.sym) {
                     c.SDLK_ESCAPE => {
