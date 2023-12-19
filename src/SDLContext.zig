@@ -161,7 +161,7 @@ pub fn copyToBackbuffer(self: Self, frame: *const Gameboy.Frame) !void {
 
     const ptr: [*]u8 = @ptrCast(pixel_ptr);
     const pixels = ptr[0..Gameboy.Frame.size];
-    @memcpy(pixels, frame.pixels);
+    @memcpy(pixels, frame.pixels[0..]);
 
     c.SDL_UnlockTexture(self.texture);
 }

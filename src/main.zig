@@ -5,7 +5,7 @@ const SDLContext = @import("SDLContext.zig");
 const Gameboy = @import("Gameboy.zig");
 
 var running = true;
-var frame = Gameboy.Frame{};
+var frame = Gameboy.Frame{ .pixels = undefined };
 var rng = std.rand.DefaultPrng.init(0);
 
 fn runLoop(sdl: *SDLContext) !void {
@@ -32,17 +32,17 @@ fn runLoop(sdl: *SDLContext) !void {
     // Gameboy.step();
     // std.time.sleep(std.time.ns_per_ms * 100);
 
-    // const tiles = vram.getTiles();
-    // for (&frame.pixels, 0..) |*p, i| {
-    //     p.* = tiles.pixels[i];
-    // }
+    const gbframe = Gameboy.frame();
+    for (&frame.pixels, 0..) |*p, i| {
+        p.* = gbframe.pixels[i];
+    }
 
     try sdl.updateDebugWindow();
 
-    // try sdl.clearFramebuffer();
-    // try sdl.copyToBackbuffer(&frame);
-    // try sdl.renderCopy();
-    // sdl.renderPresent();
+    try sdl.clearFramebuffer();
+    try sdl.copyToBackbuffer(&frame);
+    try sdl.renderCopy();
+    sdl.renderPresent();
 
     std.time.sleep(std.time.ns_per_ms);
 }

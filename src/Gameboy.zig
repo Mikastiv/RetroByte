@@ -70,3 +70,7 @@ pub fn run() void {
         }
     }
 }
+
+pub fn frame() *Frame {
+    return ppu.currentFrame();
+}

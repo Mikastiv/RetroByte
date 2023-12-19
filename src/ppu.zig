@@ -30,7 +30,12 @@ var framebuffers: [2]Gameboy.Frame = undefined;
 
 var line_dot: u32 = undefined;
 
-const colors = [4]u24{ 0xFFFFFF, 0xAAAAAA, 0x555555, 0x000000 };
+const colors = [4]Gameboy.Frame.Color{
+    .{ .r = 0xFF, .g = 0xFF, .b = 0xFF },
+    .{ .r = 0xAA, .g = 0xAA, .b = 0xAA },
+    .{ .r = 0x55, .g = 0x55, .b = 0x55 },
+    .{ .r = 0x00, .g = 0x00, .b = 0x00 },
+};
 
 const Control = packed union {
     bit: packed struct {
@@ -95,8 +100,8 @@ const Registers = struct {
 };
 
 pub var regs: Registers = undefined;
-var bg_colors: [4]u24 = undefined;
-var obj_colors: [2][4]u24 = undefined;
+var bg_colors: [4]Gameboy.Frame.Color = undefined;
+var obj_colors: [2][4]Gameboy.Frame.Color = undefined;
 var fetcher: Fetcher = undefined;
 var fifo: Fifo = undefined;
 
@@ -167,10 +172,12 @@ fn oamScanTick() void {
 
 fn pixelTransferTick() void {
     fetcher.tick();
+    fifo.push();
     if (line_dot >= 80 + 172) {
         // TODO: interrupt 1 cycle before switch to hblank
         regs.stat.bit.mode = .hblank;
         fetcher.reset();
+        fifo.reset();
     }
 }
 
@@ -223,7 +230,7 @@ pub fn read(addr: u16) u8 {
 const Palette = enum { bg, obj0, obj1 };
 
 fn updatePalette(data: u8, comptime palette: Palette) void {
-    var ptr: *[4]u24 = undefined;
+    var ptr: *[4]Gameboy.Frame.Color = undefined;
     switch (palette) {
         .bg => ptr = &bg_colors,
         .obj0 => ptr = &obj_colors[0],
@@ -303,7 +310,7 @@ const Fetcher = struct {
             .idle => if (line_dot & 1 == 0) {
                 self.state = .push;
             },
-            .push => if (fifo.addPixels()) {
+            .push => if (fifo.addPixels(self.byte0, self.byte1)) {
                 self.state = .tile;
             },
         }
@@ -316,8 +323,42 @@ const Fetcher = struct {
 
 const Fifo = struct {
     size: u8 = 0,
+    shifter_lo: u16 = 0,
+    shifter_hi: u16 = 0,
+    x: u8 = 0,
 
-    fn addPixels(self: @This()) bool {
-        return self.size < 8;
+    fn addPixels(self: *@This(), lo: u8, hi: u8) bool {
+        if (self.size > 8) return false;
+
+        self.shifter_lo |= @as(u16, lo) << @intCast(8 - self.size);
+        self.shifter_hi |= @as(u16, hi) << @intCast(8 - self.size);
+        self.size += 8;
+
+        std.debug.assert(self.size <= 16);
+
+        return true;
+    }
+
+    fn push(self: *@This()) void {
+        if (self.size <= 8) return;
+
+        const lo: u2 = @intFromBool(self.shifter_lo & 0x80 != 0);
+        const hi: u2 = @intFromBool(self.shifter_hi & 0x80 != 0);
+        const idx = hi << 1 | lo;
+        self.shifter_hi <<= 1;
+        self.shifter_lo <<= 1;
+        self.size -= 1;
+
+        const color = bg_colors[idx];
+        framebuffers[0].putPixel(self.x, regs.ly, color);
+        self.x += 1;
+    }
+
+    fn reset(self: *@This()) void {
+        self.* = .{};
     }
 };
+
+pub fn currentFrame() *Gameboy.Frame {
+    return &framebuffers[0];
+}
