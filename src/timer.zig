@@ -5,13 +5,13 @@ const bus = @import("bus.zig");
 var request_interrupt = false;
 var tima_just_loaded = false;
 
-var div: u16 = 0xAC00;
+var div: u16 = 0xABCC;
 var tima: u8 = 0;
 var tma: u8 = 0;
 var tac: u8 = 0;
 
 pub fn init() void {
-    div = 0xAC00;
+    div = 0xABCC;
     tima = 0;
     tma = 0;
     tac = 0;

@@ -125,36 +125,28 @@ pub fn step() u128 {
     debug.print();
 
     const cycles_start = bus.cycles;
-
-    if (cpu.halted) {
-        bus.tick();
-        if (interrupts.any()) {
-            cpu.halted = false;
-            if (cpu.skip_interrupts) {
-                cpu.skip_interrupts = false;
-                execute();
-            }
-        }
-    } else {
-        execute();
-    }
-
-    if (cpu.ime) handleInterrupt();
+    const ime = cpu.ime;
 
     if (cpu.enabling_ime) {
         cpu.ime = true;
         cpu.enabling_ime = false;
     }
 
+    if (cpu.halted) bus.tick();
+
+    if (cpu.halted and !ime and interrupts.any()) {
+        cpu.halted = false;
+    } else if (ime and interrupts.any()) {
+        handleInterrupt();
+    } else if (!cpu.halted) {
+        execute();
+    }
+
     return elapsedCycles(cycles_start);
 }
 
 fn handleInterrupt() void {
-    if (!interrupts.any()) return;
-
-    cpu.ime = false;
-    cpu.enabling_ime = false;
-
+    cpu.halted = false;
     bus.tick();
     bus.tick();
 
@@ -169,6 +161,8 @@ fn handleInterrupt() void {
         .joypad => 0x0060,
     };
     cpu.regs._16.set(.pc, addr);
+
+    cpu.ime = false;
     interrupts.handled(interrupt);
 }
 
@@ -536,17 +530,22 @@ fn stop() void {
 }
 
 fn halt() void {
-    if (cpu.ime) {
-        cpu.halted = true;
+    if (interrupts.any()) {
+        if (cpu.ime) {
+            cpu.halted = true;
+        } else {
+            cpu.halted = false;
+            cpu.halt_bug = true;
+        }
     } else {
-        cpu.halt_bug = interrupts.any();
-        cpu.halted = !cpu.halt_bug;
-        cpu.skip_interrupts = cpu.halted;
+        cpu.halted = true;
     }
 }
 
 fn ei() void {
-    cpu.enabling_ime = true;
+    if (!cpu.ime and !cpu.enabling_ime) {
+        cpu.enabling_ime = true;
+    }
 }
 
 fn di() void {
