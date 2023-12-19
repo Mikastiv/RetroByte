@@ -28,6 +28,7 @@ var vram: [vram_size]u8 = undefined;
 
 var framebuffers: [2]Gameboy.Frame = undefined;
 var current_frame: usize = undefined;
+var display_frame: usize = undefined;
 
 var line_dot: u32 = undefined;
 
@@ -111,7 +112,10 @@ pub fn init() void {
         buf.clear();
     }
     current_frame = 0;
+    display_frame = 1;
+
     oam = std.mem.zeroes(@TypeOf(oam));
+    vram = std.mem.zeroes(@TypeOf(vram));
     line_dot = 0;
 
     regs = .{};
@@ -180,6 +184,9 @@ fn pixelTransferTick() void {
         regs.stat.bit.mode = .hblank;
         fetcher.reset();
         fifo.reset();
+        if (regs.stat.bit.hblank_int) {
+            interrupts.request(.stat);
+        }
     }
 }
 
@@ -190,6 +197,7 @@ fn hblankTick() void {
         if (regs.ly >= Gameboy.screen_height) {
             regs.stat.bit.mode = .vblank;
             current_frame = (current_frame + 1) % framebuffers.len;
+            display_frame = (display_frame + 1) % framebuffers.len;
             interrupts.request(.vblank);
             if (regs.stat.bit.vblank_int) {
                 interrupts.request(.stat);
@@ -281,13 +289,14 @@ const Fetcher = struct {
     map_x: u16 = 0,
     map_y: u16 = 0,
     tile_y: u16 = 0,
-    tile: u16 = 0,
+    tile: u8 = 0,
     byte0: u8 = 0,
     byte1: u8 = 0,
 
     fn tick(self: *@This()) void {
-        self.map_x = regs.scx + self.x;
-        self.map_y = regs.ly + regs.scy;
+        // TODO: scroll
+        self.map_x = self.x;
+        self.map_y = regs.ly +% regs.scy;
         self.tile_y = self.map_y % 8;
         switch (self.state) {
             .tile => if (line_dot & 1 == 0) {
@@ -295,19 +304,19 @@ const Fetcher = struct {
                     // TODO: change impl when adding vram blocking
                     self.tile = vramRead(regs.ctrl.bgTileMapArea() + self.map_x / 8 + self.map_y / 8 * 32); // 32 tiles per row
                     // tiles start at 128 if lcdc.4 is off
-                    if (!regs.ctrl.bit.bgw_data) self.tile += 128;
+                    if (!regs.ctrl.bit.bgw_data) self.tile +%= 128;
                 }
                 self.state = .data0;
                 self.x += 8;
             },
             .data0 => if (line_dot & 1 == 0) {
                 // TODO: change impl when adding vram blocking
-                self.byte0 = vramRead(regs.ctrl.bgwTileDataArea() + self.tile * 16 + self.tile_y * 2);
+                self.byte0 = vramRead(regs.ctrl.bgwTileDataArea() + @as(u16, self.tile) * 16 + self.tile_y * 2);
                 self.state = .data1;
             },
             .data1 => if (line_dot & 1 == 0) {
                 // TODO: change impl when adding vram blocking
-                self.byte1 = vramRead(regs.ctrl.bgwTileDataArea() + self.tile * 16 + self.tile_y * 2 + 1);
+                self.byte1 = vramRead(regs.ctrl.bgwTileDataArea() + @as(u16, self.tile) * 16 + self.tile_y * 2 + 1);
                 self.state = .idle;
             },
             .idle => if (line_dot & 1 == 0) {
@@ -363,5 +372,5 @@ const Fifo = struct {
 };
 
 pub fn currentFrame() *const Gameboy.Frame {
-    return &framebuffers[current_frame];
+    return &framebuffers[display_frame];
 }

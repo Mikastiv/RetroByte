@@ -22,9 +22,9 @@ pub fn update() void {
 }
 
 pub fn print() void {
-    const msg = dbg_msg_buffer[0..dbg_msg_len];
-    if (std.mem.indexOf(u8, msg, "Failed") != null or std.mem.indexOf(u8, msg, "Passed") != null)
-        buffered_writer.writer().print("{s}\n", .{msg}) catch unreachable;
+    // const msg = dbg_msg_buffer[0..dbg_msg_len];
+    // if (std.mem.indexOf(u8, msg, "Failed") != null or std.mem.indexOf(u8, msg, "Passed") != null)
+    //     buffered_writer.writer().print("{s}\n", .{msg}) catch unreachable;
 }
 
 pub fn disassemble(opcode: u8, regs: Registers) !void {
