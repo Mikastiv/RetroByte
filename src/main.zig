@@ -3,6 +3,7 @@ const c = @import("c.zig");
 const builtin = @import("builtin");
 const SDLContext = @import("SDLContext.zig");
 const Gameboy = @import("Gameboy.zig");
+const joypad = @import("joypad.zig");
 
 var running = true;
 var frame = Gameboy.Frame{ .pixels = undefined };
@@ -22,6 +23,19 @@ fn runLoop(sdl: *SDLContext) !void {
                         running = false;
                         break;
                     },
+                    c.SDLK_a => joypad.keydown(.a),
+                    c.SDLK_s => joypad.keydown(.b),
+                    c.SDLK_z => joypad.keydown(.start),
+                    c.SDLK_x => joypad.keydown(.select),
+                    else => {},
+                }
+            },
+            c.SDL_KEYUP => {
+                switch (event.key.keysym.sym) {
+                    c.SDLK_a => joypad.keyup(.a),
+                    c.SDLK_s => joypad.keyup(.b),
+                    c.SDLK_z => joypad.keyup(.start),
+                    c.SDLK_x => joypad.keyup(.select),
                     else => {},
                 }
             },

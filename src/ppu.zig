@@ -117,8 +117,8 @@ pub fn init() void {
     regs = .{};
     regs.stat.bit.mode = .oam_scan;
 
-    fetcher = .{};
-    fifo = .{};
+    fetcher.reset();
+    fifo.reset();
 
     for (colors, 0..) |color, i| {
         bg_colors[i] = color;
@@ -160,7 +160,6 @@ pub fn vramWrite(addr: u16, data: u8) void {
 
 pub fn tick() void {
     line_dot += 1;
-
     switch (regs.stat.bit.mode) {
         .hblank => hblankTick(),
         .vblank => vblankTick(),
@@ -176,7 +175,7 @@ fn oamScanTick() void {
 fn pixelTransferTick() void {
     fetcher.tick();
     fifo.push();
-    if (line_dot >= 80 + 172) {
+    if (fifo.x >= Gameboy.screen_width) {
         // TODO: interrupt 1 cycle before switch to hblank
         regs.stat.bit.mode = .hblank;
         fetcher.reset();
@@ -289,7 +288,7 @@ const Fetcher = struct {
     fn tick(self: *@This()) void {
         self.map_x = regs.scx + self.x;
         self.map_y = regs.ly + regs.scy;
-        self.tile_y = (self.map_y % 8) * 2;
+        self.tile_y = self.map_y % 8;
         switch (self.state) {
             .tile => if (line_dot & 1 == 0) {
                 if (regs.ctrl.bit.bgw_on) {
@@ -303,12 +302,12 @@ const Fetcher = struct {
             },
             .data0 => if (line_dot & 1 == 0) {
                 // TODO: change impl when adding vram blocking
-                self.byte0 = vramRead(regs.ctrl.bgwTileDataArea() + self.tile * 16 + self.tile_y);
+                self.byte0 = vramRead(regs.ctrl.bgwTileDataArea() + self.tile * 16 + self.tile_y * 2);
                 self.state = .data1;
             },
             .data1 => if (line_dot & 1 == 0) {
                 // TODO: change impl when adding vram blocking
-                self.byte1 = vramRead(regs.ctrl.bgwTileDataArea() + self.tile * 16 + self.tile_y + 1);
+                self.byte1 = vramRead(regs.ctrl.bgwTileDataArea() + self.tile * 16 + self.tile_y * 2 + 1);
                 self.state = .idle;
             },
             .idle => if (line_dot & 1 == 0) {
@@ -346,8 +345,8 @@ const Fifo = struct {
     fn push(self: *@This()) void {
         if (self.size <= 8) return;
 
-        const lo: u2 = @intFromBool(self.shifter_lo & 0x80 != 0);
-        const hi: u2 = @intFromBool(self.shifter_hi & 0x80 != 0);
+        const lo: u2 = @intFromBool(self.shifter_lo & 0x8000 != 0);
+        const hi: u2 = @intFromBool(self.shifter_hi & 0x8000 != 0);
         const idx = hi << 1 | lo;
         self.shifter_hi <<= 1;
         self.shifter_lo <<= 1;

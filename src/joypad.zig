@@ -70,10 +70,10 @@ pub fn keyup(button: GbButton) void {
         .b => buttons_state.buttons.b = 1,
         .select => buttons_state.buttons.select = 1,
         .start => buttons_state.buttons.start = 1,
-        .right => buttons_state.buttons.right = 1,
-        .left => buttons_state.buttons.left = 1,
-        .up => buttons_state.buttons.up = 1,
-        .down => buttons_state.buttons.down = 1,
+        .right => dpad_state.buttons.right = 1,
+        .left => dpad_state.buttons.left = 1,
+        .up => dpad_state.buttons.up = 1,
+        .down => dpad_state.buttons.down = 1,
     }
 }
 
@@ -83,10 +83,10 @@ pub fn keydown(button: GbButton) void {
         .b => buttons_state.buttons.b = 0,
         .select => buttons_state.buttons.select = 0,
         .start => buttons_state.buttons.start = 0,
-        .right => buttons_state.buttons.right = 0,
-        .left => buttons_state.buttons.left = 0,
-        .up => buttons_state.buttons.up = 0,
-        .down => buttons_state.buttons.down = 0,
+        .right => dpad_state.buttons.right = 0,
+        .left => dpad_state.buttons.left = 0,
+        .up => dpad_state.buttons.up = 0,
+        .down => dpad_state.buttons.down = 0,
     }
     interrupts.request(.joypad);
 }
