@@ -71,6 +71,6 @@ pub fn run() void {
     }
 }
 
-pub fn frame() *Frame {
+pub fn frame() *const Frame {
     return ppu.currentFrame();
 }

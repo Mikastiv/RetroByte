@@ -27,6 +27,7 @@ var oam: [oam_size]OamEntry = undefined;
 var vram: [vram_size]u8 = undefined;
 
 var framebuffers: [2]Gameboy.Frame = undefined;
+var current_frame: usize = undefined;
 
 var line_dot: u32 = undefined;
 
@@ -106,8 +107,10 @@ var fetcher: Fetcher = undefined;
 var fifo: Fifo = undefined;
 
 pub fn init() void {
-    framebuffers[0].clear();
-    framebuffers[1].clear();
+    for (&framebuffers) |*buf| {
+        buf.clear();
+    }
+    current_frame = 0;
     oam = std.mem.zeroes(@TypeOf(oam));
     line_dot = 0;
 
@@ -187,6 +190,7 @@ fn hblankTick() void {
         incrementLy();
         if (regs.ly >= Gameboy.screen_height) {
             regs.stat.bit.mode = .vblank;
+            current_frame = (current_frame + 1) % framebuffers.len;
             interrupts.request(.vblank);
             if (regs.stat.bit.vblank_int) {
                 interrupts.request(.stat);
@@ -350,7 +354,7 @@ const Fifo = struct {
         self.size -= 1;
 
         const color = bg_colors[idx];
-        framebuffers[0].putPixel(self.x, regs.ly, color);
+        framebuffers[current_frame].putPixel(self.x, regs.ly, color);
         self.x += 1;
     }
 
@@ -359,6 +363,6 @@ const Fifo = struct {
     }
 };
 
-pub fn currentFrame() *Gameboy.Frame {
-    return &framebuffers[0];
+pub fn currentFrame() *const Gameboy.Frame {
+    return &framebuffers[current_frame];
 }
