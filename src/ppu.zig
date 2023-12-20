@@ -65,7 +65,7 @@ const Control = packed union {
     }
 
     fn winTileMapArea(self: @This()) u16 {
-        return if (self.bit.window_map) 0x9C00 else 0x9800;
+        return if (self.bit.win_map) 0x9C00 else 0x9800;
     }
 };
 
@@ -99,6 +99,7 @@ const Registers = struct {
     obj_pal: [2]u8 = .{ 0xFF, 0xFF },
     win_y: u8 = 0,
     win_x: u8 = 0,
+    window_line: u8 = 0,
 };
 
 pub var regs: Registers = undefined;
@@ -176,7 +177,15 @@ fn oamScanTick() void {
     if (line_dot >= 80) regs.stat.bit.mode = .pixel_transfer;
 }
 
+fn windowVisible() bool {
+    return regs.ctrl.bit.win_on and regs.win_x <= 166 and regs.win_y < Gameboy.screen_height;
+}
+
 fn pixelTransferTick() void {
+    if (windowVisible() and regs.win_x == fifo.x + 7 and fetcher.area != .win and regs.ly >= regs.win_y) {
+        fetcher.switchToWindow();
+        fifo.clear();
+    }
     fetcher.tick();
     fifo.push();
     if (fifo.x >= Gameboy.screen_width) {
@@ -215,6 +224,7 @@ fn vblankTick() void {
         if (regs.ly == lines_per_frame) {
             regs.stat.bit.mode = .oam_scan;
             regs.ly = 0;
+            regs.window_line = 0;
         }
     }
 }
@@ -234,6 +244,8 @@ pub fn read(addr: u16) u8 {
         0xFF45 => regs.lyc,
         0xFF47 => regs.bg_pal,
         0xFF48, 0xFF49 => regs.obj_pal[addr & 1],
+        0xFF4A => regs.win_y,
+        0xFF4B => regs.win_x,
         else => 0,
     };
 }
@@ -265,11 +277,15 @@ pub fn write(addr: u16, data: u8) void {
         0xFF47 => updatePalette(data, .bg),
         0xFF48 => updatePalette(data & 0xFC, .obj0),
         0xFF49 => updatePalette(data & 0xFC, .obj1),
+        0xFF4A => regs.win_y = data,
+        0xFF4B => regs.win_x = data,
         else => {},
     }
 }
 
 fn incrementLy() void {
+    if (windowVisible() and regs.ly >= regs.win_y) regs.window_line += 1;
+
     regs.ly += 1;
     if (regs.ly == regs.lyc) {
         regs.stat.bit.match_flag = true;
@@ -283,26 +299,44 @@ fn incrementLy() void {
 
 const Fetcher = struct {
     const State = enum { tile, data0, data1, idle, push };
+    const Area = enum { bg, win };
 
     state: State = .tile,
-    x: u16 = 0,
-    map_x: u16 = 0,
-    map_y: u16 = 0,
-    tile_y: u16 = 0,
+    area: Area = .bg,
+    x: u8 = 0,
+    map_x: u8 = 0,
+    map_y: u8 = 0,
+    tile_y: u8 = 0,
     tile: u8 = 0,
     byte0: u8 = 0,
     byte1: u8 = 0,
 
+    fn tileMapArea(self: *const @This()) u16 {
+        return switch (self.area) {
+            .bg => regs.ctrl.bgTileMapArea(),
+            .win => regs.ctrl.winTileMapArea(),
+        };
+    }
+
     fn tick(self: *@This()) void {
         // TODO: fine x scroll
-        self.map_x = (self.x +% (regs.scx / 8)) & 0x1F;
-        self.map_y = regs.ly +% regs.scy;
-        self.tile_y = self.map_y % 8;
+        switch (self.area) {
+            .bg => {
+                self.map_x = (self.x +% (regs.scx / 8)) & 0x1F;
+                self.map_y = regs.ly +% regs.scy;
+                self.tile_y = self.map_y % 8;
+            },
+            .win => {
+                self.map_x = self.x;
+                self.map_y = regs.window_line;
+                self.tile_y = self.map_y % 8;
+            },
+        }
         switch (self.state) {
             .tile => if (line_dot & 1 == 0) {
                 if (regs.ctrl.bit.bgw_on) {
                     // TODO: change impl when adding vram blocking
-                    self.tile = vramRead(regs.ctrl.bgTileMapArea() + self.map_x + self.map_y / 8 * 32); // 32 tiles per row
+                    self.tile = vramRead(self.tileMapArea() + self.map_x + @as(u16, self.map_y) / 8 * 32); // 32 tiles per row
                     // tiles start at 128 if lcdc.4 is off
                     if (!regs.ctrl.bit.bgw_data) self.tile +%= 128;
                 }
@@ -326,6 +360,12 @@ const Fetcher = struct {
                 self.state = .tile;
             },
         }
+    }
+
+    fn switchToWindow(self: *@This()) void {
+        self.x = 0;
+        self.area = .win;
+        self.state = .tile;
     }
 
     fn reset(self: *@This()) void {
@@ -364,6 +404,12 @@ const Fifo = struct {
         const color = bg_colors[idx];
         framebuffers[current_frame].putPixel(self.x, regs.ly, color);
         self.x += 1;
+    }
+
+    fn clear(self: *@This()) void {
+        self.shifter_hi = 0;
+        self.shifter_lo = 0;
+        self.size = 0;
     }
 
     fn reset(self: *@This()) void {

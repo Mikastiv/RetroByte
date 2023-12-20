@@ -23,7 +23,7 @@
             "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/zig-out/bin/retrobyte",
-            "args": ["rom/tetris.gb"],
+            "args": ["tests/dmg-acid2/dmg-acid2.gb"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
