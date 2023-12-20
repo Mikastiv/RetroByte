@@ -100,7 +100,8 @@ pub fn main() !u8 {
     if (builtin.os.tag == .emscripten) {
         c.emscripten_set_main_loop_arg(emscriptenLoopWrapper, @ptrCast(&sdl), 0, 1);
     } else {
-        _ = try std.Thread.spawn(.{}, Gameboy.run, .{});
+        var thread = try std.Thread.spawn(.{}, Gameboy.run, .{&running});
+        defer thread.join();
         while (running) {
             try runLoop(&sdl);
         }

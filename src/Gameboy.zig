@@ -52,6 +52,8 @@ pub fn init(allocator: std.mem.Allocator, rom_filepath: []const u8) !void {
     ppu.init();
     dma.init();
 
+    time = try std.time.Timer.start();
+
     try rom.printHeader();
 }
 
@@ -60,14 +62,22 @@ pub fn step() void {
 }
 
 var executed_cycles: u128 = 0;
-pub fn run() void {
-    while (true) {
-        executed_cycles += cpu.step();
+var time: std.time.Timer = undefined;
+pub fn run(running: *const bool) void {
+    time.reset();
+    while (running.*) {
+        const current = ppu.currentFrame();
+        _ = cpu.step();
         // TODO: better timing code (windows sleep is not accurate)
-        if (@as(f64, @floatFromInt(executed_cycles)) > cpu.freq_ms) {
-            std.time.sleep(std.time.ns_per_ms);
-            executed_cycles -= @intFromFloat(cpu.freq_ms);
+        if (current != ppu.currentFrame()) {
+            const elapsed = time.read();
+            const ns = 1000000000 / 60;
+            std.time.sleep(ns - elapsed);
+            time.reset();
         }
+        // if (@as(f64, @floatFromInt(executed_cycles)) > cpu.freq_ms) {
+        //     executed_cycles -= @intFromFloat(cpu.freq_ms);
+        // }
     }
 }
 
