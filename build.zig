@@ -65,7 +65,7 @@ pub fn build(b: *std.Build) !void {
             } else {
                 const sdl2_dep = b.dependency("SDL2", .{
                     .target = target,
-                    .optimize = optimize,
+                    .optimize = .ReleaseFast,
                 });
                 const sdl2 = sdl2_dep.artifact("SDL2");
 
