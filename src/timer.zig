@@ -5,16 +5,19 @@ const bus = @import("bus.zig");
 var request_interrupt = false;
 var tima_just_loaded = false;
 
-var div: u16 = 0xABCC;
-var tima: u8 = 0;
-var tma: u8 = 0;
-var tac: u8 = 0;
+var div: u16 = undefined;
+var tima: u8 = undefined;
+var tma: u8 = undefined;
+var tac: u8 = undefined;
+
+var reload_delay: u8 = undefined;
 
 pub fn init() void {
     div = 0xABCC;
     tima = 0;
     tma = 0;
     tac = 0;
+    reload_delay = 0;
 }
 
 fn tacMask() u16 {
@@ -45,13 +48,15 @@ fn incrementTima() void {
 }
 
 pub fn tick() void {
+    if (tima_just_loaded) reload_delay -= 1;
+    if (reload_delay == 0) tima_just_loaded = false;
+
     if (request_interrupt) {
         request_interrupt = false;
         interrupts.request(.timer);
         tima = tma;
         tima_just_loaded = true;
-    } else {
-        tima_just_loaded = false;
+        reload_delay = 4;
     }
 
     const old_bit = divOutputBit();

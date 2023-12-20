@@ -2,20 +2,20 @@ const interrupts = @import("interrupts.zig");
 
 const Buttons = packed union {
     buttons: packed struct {
-        a: u1,
-        b: u1,
-        select: u1,
-        start: u1,
+        a: bool,
+        b: bool,
+        select: bool,
+        start: bool,
     },
     raw: u4,
 };
 
 const DPad = packed union {
     buttons: packed struct {
-        right: u1,
-        left: u1,
-        up: u1,
-        down: u1,
+        right: bool,
+        left: bool,
+        up: bool,
+        down: bool,
     },
     raw: u4,
 };
@@ -61,29 +61,16 @@ pub fn write(data: u8) void {
     select = data & 0x30;
 }
 
-pub fn keyup(button: GbButton) void {
+pub fn keypress(button: GbButton, up: bool) void {
     switch (button) {
-        .a => buttons_state.buttons.a = 1,
-        .b => buttons_state.buttons.b = 1,
-        .select => buttons_state.buttons.select = 1,
-        .start => buttons_state.buttons.start = 1,
-        .right => dpad_state.buttons.right = 1,
-        .left => dpad_state.buttons.left = 1,
-        .up => dpad_state.buttons.up = 1,
-        .down => dpad_state.buttons.down = 1,
+        .a => buttons_state.buttons.a = up,
+        .b => buttons_state.buttons.b = up,
+        .select => buttons_state.buttons.select = up,
+        .start => buttons_state.buttons.start = up,
+        .right => dpad_state.buttons.right = up,
+        .left => dpad_state.buttons.left = up,
+        .up => dpad_state.buttons.up = up,
+        .down => dpad_state.buttons.down = up,
     }
-}
-
-pub fn keydown(button: GbButton) void {
-    switch (button) {
-        .a => buttons_state.buttons.a = 0,
-        .b => buttons_state.buttons.b = 0,
-        .select => buttons_state.buttons.select = 0,
-        .start => buttons_state.buttons.start = 0,
-        .right => dpad_state.buttons.right = 0,
-        .left => dpad_state.buttons.left = 0,
-        .up => dpad_state.buttons.up = 0,
-        .down => dpad_state.buttons.down = 0,
-    }
-    interrupts.request(.joypad);
+    if (!up) interrupts.request(.joypad);
 }

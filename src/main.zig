@@ -9,6 +9,20 @@ var running = true;
 var frame = Gameboy.Frame{ .pixels = undefined };
 var rng = std.rand.DefaultPrng.init(0);
 
+fn keyevent(key: c.SDL_Keycode, up: bool) void {
+    switch (key) {
+        c.SDLK_a => joypad.keypress(.a, up),
+        c.SDLK_s => joypad.keypress(.b, up),
+        c.SDLK_z => joypad.keypress(.start, up),
+        c.SDLK_x => joypad.keypress(.select, up),
+        c.SDLK_UP => joypad.keypress(.up, up),
+        c.SDLK_DOWN => joypad.keypress(.down, up),
+        c.SDLK_LEFT => joypad.keypress(.left, up),
+        c.SDLK_RIGHT => joypad.keypress(.right, up),
+        else => {},
+    }
+}
+
 fn runLoop(sdl: *SDLContext) !void {
     var event: c.SDL_Event = undefined;
     while (c.SDL_PollEvent(&event) != 0) {
@@ -27,20 +41,12 @@ fn runLoop(sdl: *SDLContext) !void {
                         running = false;
                         break;
                     },
-                    c.SDLK_a => joypad.keydown(.a),
-                    c.SDLK_s => joypad.keydown(.b),
-                    c.SDLK_z => joypad.keydown(.start),
-                    c.SDLK_x => joypad.keydown(.select),
-                    else => {},
+                    else => keyevent(event.key.keysym.sym, false),
                 }
             },
             c.SDL_KEYUP => {
                 switch (event.key.keysym.sym) {
-                    c.SDLK_a => joypad.keyup(.a),
-                    c.SDLK_s => joypad.keyup(.b),
-                    c.SDLK_z => joypad.keyup(.start),
-                    c.SDLK_x => joypad.keyup(.select),
-                    else => {},
+                    else => keyevent(event.key.keysym.sym, true),
                 }
             },
             else => {},
