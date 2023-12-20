@@ -10,8 +10,7 @@ const Flags = registers.Flags;
 const Reg16 = registers.Reg16;
 const Reg8 = registers.Reg8;
 
-pub const freq = 1048576.0;
-pub const freq_ms = freq / 1000.0;
+pub const freq_hz = 1048576.0; // 1.048576 MHz
 
 const RotateOp = enum { rl, rlc, rr, rrc };
 const JumpCond = enum { c, z, nc, nz, always };

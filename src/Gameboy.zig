@@ -61,7 +61,6 @@ pub fn step() void {
     _ = cpu.step();
 }
 
-var executed_cycles: u128 = 0;
 var time: std.time.Timer = undefined;
 pub fn run(running: *const bool) void {
     time.reset();
@@ -70,14 +69,11 @@ pub fn run(running: *const bool) void {
         _ = cpu.step();
         // TODO: better timing code (windows sleep is not accurate)
         if (current != ppu.currentFrame()) {
-            const elapsed = time.read();
-            const ns = 1000000000 / 60;
-            std.time.sleep(ns - elapsed);
+            const elapsed_ns = time.read();
+            const expected_ns = 16750419; // 59.7 fps
+            if (expected_ns > elapsed_ns) std.time.sleep(expected_ns - elapsed_ns);
             time.reset();
         }
-        // if (@as(f64, @floatFromInt(executed_cycles)) > cpu.freq_ms) {
-        //     executed_cycles -= @intFromFloat(cpu.freq_ms);
-        // }
     }
 }
 
