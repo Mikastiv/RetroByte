@@ -30,9 +30,6 @@ var framebuffers: [2]Gameboy.Frame = undefined;
 var current_frame: usize = undefined;
 var display_frame: usize = undefined;
 
-var line_dot: u32 = undefined;
-var interrupt_line: bool = undefined;
-
 const colors = [4]Gameboy.Frame.Color{
     .{ .r = 0xFF, .g = 0xFF, .b = 0xFF },
     .{ .r = 0xAA, .g = 0xAA, .b = 0xAA },
@@ -110,6 +107,11 @@ var obj_colors: [2][4]Gameboy.Frame.Color = undefined;
 var fetcher: Fetcher = undefined;
 var fifo: Fifo = undefined;
 
+var line_dot: u32 = undefined;
+var interrupt_line: bool = undefined;
+var visible_sprites: [10]OamEntry = undefined;
+var visible_sprites_count: u8 = undefined;
+
 pub fn init() void {
     for (&framebuffers) |*buf| {
         buf.clear();
@@ -119,6 +121,8 @@ pub fn init() void {
 
     oam = std.mem.zeroes(@TypeOf(oam));
     vram = std.mem.zeroes(@TypeOf(vram));
+    visible_sprites = std.mem.zeroes(@TypeOf(visible_sprites));
+    visible_sprites_count = 0;
     line_dot = 0;
     interrupt_line = false;
 
@@ -140,6 +144,7 @@ fn validateOamAddress(addr: u16) void {
 }
 
 pub fn oamRead(addr: u16) u8 {
+    // return 0xFF during oam scan
     validateOamAddress(addr);
     const ptr: [*]const u8 = @ptrCast(@alignCast(&oam));
     return ptr[addr];
@@ -200,9 +205,19 @@ fn oamScanTick() void {
         }
     }
 
+    if (line_dot & 1 == 0 and visible_sprites_count < 10) {
+        const h = regs.ctrl.objSize();
+        const idx = regs.current_oam;
+        if (regs.ly + 16 >= oam[idx].y and regs.ly + 16 < oam[idx].y + h) {
+            visible_sprites[visible_sprites_count] = oam[idx];
+            visible_sprites_count += 1;
+        }
+        regs.current_oam += 1;
+    }
+
     if (line_dot >= 80) {
-        regs.current_oam = 0;
         regs.stat.bit.mode = .pixel_transfer;
+        regs.current_oam = 0;
         fetcher.reset();
         fifo.reset();
         fifo.discard_count = @intCast(regs.scx % 8);
@@ -214,7 +229,7 @@ fn windowVisible() bool {
 }
 
 fn pixelTransferTick() void {
-    if (windowVisible() and regs.win_x <= fifo.x + 7 and fetcher.area != .win and regs.ly >= regs.win_y) {
+    if (windowVisible() and regs.win_x == fifo.x + 7 and fetcher.area != .win and regs.ly >= regs.win_y) {
         fetcher.switchToWindow();
         fifo.clear();
     }
@@ -230,6 +245,7 @@ fn pixelTransferTick() void {
 fn hblankTick() void {
     if (line_dot >= dots_per_line) {
         line_dot = 0;
+        visible_sprites_count = 0;
         incrementLy();
         if (regs.ly >= Gameboy.screen_height) {
             regs.stat.bit.mode = .vblank;
