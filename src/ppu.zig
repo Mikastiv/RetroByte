@@ -174,7 +174,12 @@ pub fn tick() void {
 }
 
 fn oamScanTick() void {
-    if (line_dot >= 80) regs.stat.bit.mode = .pixel_transfer;
+    if (line_dot >= 80) {
+        regs.stat.bit.mode = .pixel_transfer;
+        fetcher.reset();
+        fifo.reset();
+        fifo.discard_count = @intCast(regs.scx % 8);
+    }
 }
 
 fn windowVisible() bool {
@@ -182,7 +187,7 @@ fn windowVisible() bool {
 }
 
 fn pixelTransferTick() void {
-    if (windowVisible() and regs.win_x == fifo.x + 7 and fetcher.area != .win and regs.ly >= regs.win_y) {
+    if (windowVisible() and regs.win_x <= fifo.x + 7 and fetcher.area != .win and regs.ly >= regs.win_y) {
         fetcher.switchToWindow();
         fifo.clear();
     }
@@ -191,8 +196,6 @@ fn pixelTransferTick() void {
     if (fifo.x >= Gameboy.screen_width) {
         // TODO: interrupt 1 cycle before switch to hblank
         regs.stat.bit.mode = .hblank;
-        fetcher.reset();
-        fifo.reset();
         if (regs.stat.bit.hblank_int) {
             interrupts.request(.stat);
         }
@@ -319,7 +322,6 @@ const Fetcher = struct {
     }
 
     fn tick(self: *@This()) void {
-        // TODO: fine x scroll
         switch (self.area) {
             .bg => {
                 self.map_x = (self.x +% (regs.scx / 8)) & 0x1F;
@@ -378,6 +380,7 @@ const Fifo = struct {
     shifter_lo: u16 = 0,
     shifter_hi: u16 = 0,
     x: u8 = 0,
+    discard_count: u3 = 0,
 
     fn addPixels(self: *@This(), lo: u8, hi: u8) bool {
         if (self.size > 8) return false;
@@ -393,6 +396,12 @@ const Fifo = struct {
 
     fn push(self: *@This()) void {
         if (self.size <= 8) return;
+        if (self.discard_count > 0) {
+            self.shifter_lo <<= 1;
+            self.shifter_hi <<= 1;
+            self.discard_count -= 1;
+            return;
+        }
 
         const lo: u2 = @intFromBool(self.shifter_lo & 0x8000 != 0);
         const hi: u2 = @intFromBool(self.shifter_hi & 0x8000 != 0);
@@ -410,6 +419,7 @@ const Fifo = struct {
         self.shifter_hi = 0;
         self.shifter_lo = 0;
         self.size = 0;
+        self.discard_count = 0;
     }
 
     fn reset(self: *@This()) void {
