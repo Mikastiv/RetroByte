@@ -21,7 +21,6 @@ pub fn enabledFlags() u8 {
     return enabled;
 }
 
-// TODO: check STAT blocking
 pub fn requestedFlags() u8 {
     return requests;
 }

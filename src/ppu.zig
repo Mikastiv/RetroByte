@@ -31,6 +31,7 @@ var current_frame: usize = undefined;
 var display_frame: usize = undefined;
 
 var line_dot: u32 = undefined;
+var interrupt_line: bool = undefined;
 
 const colors = [4]Gameboy.Frame.Color{
     .{ .r = 0xFF, .g = 0xFF, .b = 0xFF },
@@ -100,6 +101,7 @@ const Registers = struct {
     win_y: u8 = 0,
     win_x: u8 = 0,
     window_line: u8 = 0,
+    current_oam: u8 = 0,
 };
 
 pub var regs: Registers = undefined;
@@ -118,6 +120,7 @@ pub fn init() void {
     oam = std.mem.zeroes(@TypeOf(oam));
     vram = std.mem.zeroes(@TypeOf(vram));
     line_dot = 0;
+    interrupt_line = false;
 
     regs = .{};
     regs.stat.bit.mode = .oam_scan;
@@ -173,8 +176,32 @@ pub fn tick() void {
     }
 }
 
+fn processInterruptTrigger(source: bool, comptime mode: Mode) void {
+    const check_line: bool = switch (mode) {
+        .oam_scan, .vblank => true,
+        else => false,
+    };
+
+    if (source) {
+        if (!(check_line and interrupt_line)) interrupts.request(.stat); // STAT blocking
+        interrupt_line = true;
+    } else {
+        interrupt_line = false;
+    }
+}
+
 fn oamScanTick() void {
+    if (regs.ly == 0 and line_dot == 1) {
+        if (regs.stat.bit.oam_int) {
+            interrupts.request(.stat);
+            interrupt_line = true;
+        } else {
+            interrupt_line = false;
+        }
+    }
+
     if (line_dot >= 80) {
+        regs.current_oam = 0;
         regs.stat.bit.mode = .pixel_transfer;
         fetcher.reset();
         fifo.reset();
@@ -196,9 +223,7 @@ fn pixelTransferTick() void {
     if (fifo.x >= Gameboy.screen_width) {
         // TODO: interrupt 1 cycle before switch to hblank
         regs.stat.bit.mode = .hblank;
-        if (regs.stat.bit.hblank_int) {
-            interrupts.request(.stat);
-        }
+        processInterruptTrigger(regs.stat.bit.hblank_int, .hblank);
     }
 }
 
@@ -208,14 +233,16 @@ fn hblankTick() void {
         incrementLy();
         if (regs.ly >= Gameboy.screen_height) {
             regs.stat.bit.mode = .vblank;
+
             current_frame = (current_frame + 1) % framebuffers.len;
             display_frame = (display_frame + 1) % framebuffers.len;
+
             interrupts.request(.vblank);
-            if (regs.stat.bit.vblank_int) {
-                interrupts.request(.stat);
-            }
+
+            processInterruptTrigger(regs.stat.bit.vblank_int, .vblank);
         } else {
             regs.stat.bit.mode = .oam_scan;
+            processInterruptTrigger(regs.stat.bit.oam_int, .oam_scan);
         }
     }
 }
