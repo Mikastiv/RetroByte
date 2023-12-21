@@ -228,11 +228,23 @@ fn windowVisible() bool {
     return regs.ctrl.bit.win_on and regs.win_x <= 166 and regs.win_y < Gameboy.screen_height;
 }
 
+fn processSprites() void {
+    for (0..visible_sprites_count) |i| {
+        if (fifo.x == visible_sprites[i].x + 8) {
+            fetcher.sprite_fetch_requested = true;
+            fetcher.sprite_idx = @intCast(i);
+            fifo.paused = true;
+            break;
+        }
+    }
+}
+
 fn pixelTransferTick() void {
     if (windowVisible() and regs.win_x == fifo.x + 7 and fetcher.area != .win and regs.ly >= regs.win_y) {
         fetcher.switchToWindow();
         fifo.clear();
     }
+    processSprites();
     fetcher.tick();
     fifo.push();
     if (fifo.x >= Gameboy.screen_width) {
@@ -356,6 +368,9 @@ const Fetcher = struct {
     tile: u8 = 0,
     byte0: u8 = 0,
     byte1: u8 = 0,
+    sprite_fetch: bool = false,
+    sprite_fetch_requested: bool = false,
+    sprite_idx: u8 = 0,
 
     fn tileMapArea(self: *const @This()) u16 {
         return switch (self.area) {
@@ -377,32 +392,61 @@ const Fetcher = struct {
                 self.tile_y = self.map_y % 8;
             },
         }
+
+        if (self.sprite_fetch) {
+            std.debug.assert(self.sprite_idx < visible_sprites_count);
+            self.tile_y = (regs.ly + 16) - visible_sprites[self.sprite_idx].y;
+        }
+
         switch (self.state) {
             .tile => if (line_dot & 1 == 0) {
-                if (regs.ctrl.bit.bgw_on) {
-                    // TODO: change impl when adding vram blocking
-                    self.tile = vramRead(self.tileMapArea() + self.map_x + @as(u16, self.map_y) / 8 * 32); // 32 tiles per row
-                    // tiles start at 128 if lcdc.4 is off
-                    if (!regs.ctrl.bit.bgw_data) self.tile +%= 128;
+                if (self.sprite_fetch_requested) {
+                    self.sprite_fetch = true;
+                    self.sprite_fetch_requested = false;
+                }
+
+                if (self.sprite_fetch) {
+                    self.tile = visible_sprites[self.sprite_idx].tile;
+                } else {
+                    if (regs.ctrl.bit.bgw_on) {
+                        // TODO: change impl when adding vram blocking
+                        self.tile = vramRead(self.tileMapArea() + self.map_x + @as(u16, self.map_y) / 8 * 32); // 32 tiles per row
+                        // tiles start at 128 if lcdc.4 is off
+                        if (!regs.ctrl.bit.bgw_data) self.tile +%= 128;
+                    }
+                    self.x += 1;
                 }
                 self.state = .data0;
-                self.x += 1;
             },
             .data0 => if (line_dot & 1 == 0) {
                 // TODO: change impl when adding vram blocking
-                self.byte0 = vramRead(regs.ctrl.bgwTileDataArea() + @as(u16, self.tile) * 16 + self.tile_y * 2);
+                if (self.sprite_fetch)
+                    self.byte0 = vramRead(0x8000 + @as(u16, self.tile) * 16 + self.tile_y * 2)
+                else
+                    self.byte0 = vramRead(regs.ctrl.bgwTileDataArea() + @as(u16, self.tile) * 16 + self.tile_y * 2);
                 self.state = .data1;
             },
             .data1 => if (line_dot & 1 == 0) {
                 // TODO: change impl when adding vram blocking
-                self.byte1 = vramRead(regs.ctrl.bgwTileDataArea() + @as(u16, self.tile) * 16 + self.tile_y * 2 + 1);
+                if (self.sprite_fetch)
+                    self.byte1 = vramRead(0x8000 + @as(u16, self.tile) * 16 + self.tile_y * 2 + 1)
+                else
+                    self.byte1 = vramRead(regs.ctrl.bgwTileDataArea() + @as(u16, self.tile) * 16 + self.tile_y * 2 + 1);
+
                 self.state = .idle;
             },
             .idle => if (line_dot & 1 == 0) {
                 self.state = .push;
             },
-            .push => if (fifo.addPixels(self.byte0, self.byte1)) {
-                self.state = .tile;
+            .push => {
+                if (self.sprite_fetch) {
+                    fifo.addObjPixels(self.byte0, self.byte1, self.sprite_idx);
+                    self.sprite_fetch = false;
+                    fifo.paused = false;
+                    self.state = .tile;
+                } else if (fifo.addPixels(self.byte0, self.byte1)) {
+                    self.state = .tile;
+                }
             },
         }
     }
@@ -424,9 +468,37 @@ const Fifo = struct {
     shifter_hi: u16 = 0,
     x: u8 = 0,
     discard_count: u3 = 0,
+    paused: bool = false,
+
+    obj_shifter_lo: u8 = 0,
+    obj_shifter_hi: u8 = 0,
+    obj_prio_shifter: u8 = 0,
+    obj_idx_to_bit: [8]u8 = std.mem.zeroes([8]u8),
+
+    fn addObjPixels(self: *@This(), lo: u8, hi: u8, idx: u8) void {
+        // if (self.obj_shifter_hi == 0 and self.obj_shifter_lo == 0) {
+        const entry = visible_sprites[idx];
+        self.obj_shifter_lo = lo;
+        self.obj_shifter_hi = hi;
+        self.obj_prio_shifter = if (entry.attr.priority == 0) 0x00 else 0xFF;
+        @memset(&self.obj_idx_to_bit, idx);
+        // }
+
+        // for (0..8) |i| {
+        //     const bit: u3 = (7 - i);
+        //     const mask: u8 = 1 << bit;
+        //     const b_lo: u2 = @intFromBool(self.obj_shifter_lo & mask != 0);
+        //     const b_hi: u2 = @intFromBool(self.obj_shifter_hi & mask != 0);
+        //     const color = b_hi | b_lo;
+
+        //     if (color == 0) {
+        //         obj_shifter
+        //     }
+        // }
+    }
 
     fn addPixels(self: *@This(), lo: u8, hi: u8) bool {
-        if (self.size > 8) return false;
+        if (self.paused or self.size > 8) return false;
 
         self.shifter_lo |= @as(u16, lo) << @intCast(8 - self.size);
         self.shifter_hi |= @as(u16, hi) << @intCast(8 - self.size);
@@ -438,13 +510,16 @@ const Fifo = struct {
     }
 
     fn push(self: *@This()) void {
-        if (self.size <= 8) return;
-        if (self.discard_count > 0) {
+        if (self.paused) return;
+
+        if (self.size > 0 and self.discard_count > 0) {
             self.shifter_lo <<= 1;
             self.shifter_hi <<= 1;
             self.discard_count -= 1;
             return;
         }
+
+        if (self.size <= 8) return;
 
         const lo: u2 = @intFromBool(self.shifter_lo & 0x8000 != 0);
         const hi: u2 = @intFromBool(self.shifter_hi & 0x8000 != 0);
