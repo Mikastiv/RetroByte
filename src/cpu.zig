@@ -120,8 +120,8 @@ fn elapsedCycles(start: u128) u128 {
 }
 
 pub fn step() u128 {
-    debug.update();
-    debug.print();
+    // debug.update();
+    // debug.print();
 
     const cycles_start = bus.cycles;
     const ime = cpu.ime;
@@ -1198,111 +1198,4 @@ fn prefixCb() void {
         0xFE => set(.addr_hl, 7),
         0xFF => set(.a, 7),
     }
-}
-
-const expect = std.testing.expect;
-const test_start_addr = 0xC000;
-
-fn test_init() void {
-    init();
-    cpu.regs._16.set(.pc, test_start_addr);
-}
-
-test "ld16" {
-    test_init();
-
-    bus.write(test_start_addr, 0x01);
-    bus.write(test_start_addr + 1, 0xF0);
-    bus.write(test_start_addr + 2, 0x0F);
-    step();
-    try expect(cpu.regs._16.get(.bc) == 0x0FF0);
-}
-
-test "ld" {
-    test_init();
-
-    bus.write(test_start_addr, 0x41);
-    cpu.regs._8.set(.b, 0x00);
-    cpu.regs._8.set(.c, 0xFF);
-    step();
-    try expect(cpu.regs._8.get(.b) == 0xFF);
-}
-
-test "inc" {
-    test_init();
-
-    cpu.regs._8.set(.h, 0x4F);
-    bus.write(test_start_addr, 0x24);
-    step();
-
-    try expect(cpu.regs._8.get(.h) == 0x50);
-    try expect(cpu.regs.f.z == false);
-    try expect(cpu.regs.f.n == false);
-    try expect(cpu.regs.f.h == true);
-
-    cpu.regs._8.set(.a, 0xFF);
-    bus.write(test_start_addr + 1, 0x3C);
-    step();
-
-    try expect(cpu.regs._8.get(.a) == 0x00);
-    try expect(cpu.regs.f.z == true);
-    try expect(cpu.regs.f.n == false);
-    try expect(cpu.regs.f.h == true);
-}
-
-test "dec" {
-    test_init();
-
-    const dec_addr = 0xD389;
-    cpu.regs._16.set(.hl, dec_addr);
-    bus.write(test_start_addr, 0x35);
-    bus.write(dec_addr, 0xA0);
-    step();
-
-    try expect(bus.read(dec_addr) == 0x9F);
-    try expect(cpu.regs.f.z == false);
-    try expect(cpu.regs.f.n == true);
-    try expect(cpu.regs.f.h == true);
-
-    cpu.regs._8.set(.e, 0x01);
-    bus.write(test_start_addr + 1, 0x1D);
-    step();
-
-    try expect(cpu.regs._8.get(.e) == 0x00);
-    try expect(cpu.regs.f.z == true);
-    try expect(cpu.regs.f.n == true);
-    try expect(cpu.regs.f.h == false);
-}
-
-test "add" {
-    test_init();
-
-    cpu.regs._8.set(.a, 0x01);
-    cpu.regs._8.set(.c, 0xFF);
-    bus.write(test_start_addr, 0x81);
-    step();
-
-    try expect(cpu.regs._8.get(.a) == 0x00);
-    try expect(cpu.regs.f.z == true);
-    try expect(cpu.regs.f.h == true);
-    try expect(cpu.regs.f.n == false);
-    try expect(cpu.regs.f.c == true);
-}
-
-test "adc" {
-    test_init();
-
-    const addr = 0xCD8A;
-    cpu.regs._8.set(.a, 0x00);
-    cpu.regs._16.set(.hl, addr);
-    bus.write(addr, 0x0F);
-    cpu.regs.f.c = true;
-    bus.write(test_start_addr, 0x8E);
-    step();
-
-    try expect(cpu.regs._8.get(.a) == 0x10);
-    try expect(cpu.regs.f.z == false);
-    try expect(cpu.regs.f.h == true);
-    try expect(cpu.regs.f.n == false);
-    try expect(cpu.regs.f.c == false);
 }

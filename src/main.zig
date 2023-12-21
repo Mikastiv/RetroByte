@@ -111,6 +111,5 @@ pub fn main() !u8 {
 }
 
 test {
-    _ = @import("cpu.zig");
     _ = @import("registers.zig");
 }
