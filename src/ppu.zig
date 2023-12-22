@@ -230,7 +230,7 @@ fn windowVisible() bool {
 
 fn processSprites() void {
     for (0..visible_sprites_count) |i| {
-        if (fifo.x == visible_sprites[i].x) {
+        if (fifo.x == visible_sprites[i].x -% 8) {
             const tile = visible_sprites[i].tile;
             const tile_y = (regs.ly + 16) - visible_sprites[i].y;
             const byte0 = vramRead(0x8000 + @as(u16, tile) * 16 + tile_y * 2);
