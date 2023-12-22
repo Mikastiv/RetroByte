@@ -230,10 +230,12 @@ fn windowVisible() bool {
 
 fn processSprites() void {
     for (0..visible_sprites_count) |i| {
-        if (fifo.x == visible_sprites[i].x + 8) {
-            fetcher.sprite_fetch_requested = true;
-            fetcher.sprite_idx = @intCast(i);
-            fifo.paused = true;
+        if (fifo.x == visible_sprites[i].x) {
+            const tile = visible_sprites[i].tile;
+            const tile_y = (regs.ly + 16) - visible_sprites[i].y;
+            const byte0 = vramRead(0x8000 + @as(u16, tile) * 16 + tile_y * 2);
+            const byte1 = vramRead(0x8000 + @as(u16, tile) * 16 + tile_y * 2 + 1);
+            fifo.addObjPixels(byte0, byte1, visible_sprites[i]);
             break;
         }
     }
@@ -244,7 +246,7 @@ fn pixelTransferTick() void {
         fetcher.switchToWindow();
         fifo.clear();
     }
-    processSprites();
+    if (regs.ctrl.bit.obj_on) processSprites();
     fetcher.tick();
     fifo.push();
     if (fifo.x >= Gameboy.screen_width) {
@@ -368,9 +370,6 @@ const Fetcher = struct {
     tile: u8 = 0,
     byte0: u8 = 0,
     byte1: u8 = 0,
-    sprite_fetch: bool = false,
-    sprite_fetch_requested: bool = false,
-    sprite_idx: u8 = 0,
 
     fn tileMapArea(self: *const @This()) u16 {
         return switch (self.area) {
@@ -393,60 +392,33 @@ const Fetcher = struct {
             },
         }
 
-        if (self.sprite_fetch) {
-            std.debug.assert(self.sprite_idx < visible_sprites_count);
-            self.tile_y = (regs.ly + 16) - visible_sprites[self.sprite_idx].y;
-        }
-
         switch (self.state) {
             .tile => if (line_dot & 1 == 0) {
-                if (self.sprite_fetch_requested) {
-                    self.sprite_fetch = true;
-                    self.sprite_fetch_requested = false;
+                if (regs.ctrl.bit.bgw_on) {
+                    // TODO: change impl when adding vram blocking
+                    self.tile = vramRead(self.tileMapArea() + self.map_x + @as(u16, self.map_y) / 8 * 32); // 32 tiles per row
+                    // tiles start at 128 if lcdc.4 is off
+                    if (!regs.ctrl.bit.bgw_data) self.tile +%= 128;
                 }
-
-                if (self.sprite_fetch) {
-                    self.tile = visible_sprites[self.sprite_idx].tile;
-                } else {
-                    if (regs.ctrl.bit.bgw_on) {
-                        // TODO: change impl when adding vram blocking
-                        self.tile = vramRead(self.tileMapArea() + self.map_x + @as(u16, self.map_y) / 8 * 32); // 32 tiles per row
-                        // tiles start at 128 if lcdc.4 is off
-                        if (!regs.ctrl.bit.bgw_data) self.tile +%= 128;
-                    }
-                    self.x += 1;
-                }
+                self.x += 1;
                 self.state = .data0;
             },
             .data0 => if (line_dot & 1 == 0) {
                 // TODO: change impl when adding vram blocking
-                if (self.sprite_fetch)
-                    self.byte0 = vramRead(0x8000 + @as(u16, self.tile) * 16 + self.tile_y * 2)
-                else
-                    self.byte0 = vramRead(regs.ctrl.bgwTileDataArea() + @as(u16, self.tile) * 16 + self.tile_y * 2);
+                self.byte0 = vramRead(regs.ctrl.bgwTileDataArea() + @as(u16, self.tile) * 16 + self.tile_y * 2);
                 self.state = .data1;
             },
             .data1 => if (line_dot & 1 == 0) {
                 // TODO: change impl when adding vram blocking
-                if (self.sprite_fetch)
-                    self.byte1 = vramRead(0x8000 + @as(u16, self.tile) * 16 + self.tile_y * 2 + 1)
-                else
-                    self.byte1 = vramRead(regs.ctrl.bgwTileDataArea() + @as(u16, self.tile) * 16 + self.tile_y * 2 + 1);
-
+                self.byte1 = vramRead(regs.ctrl.bgwTileDataArea() + @as(u16, self.tile) * 16 + self.tile_y * 2 + 1);
                 self.state = .idle;
             },
             .idle => if (line_dot & 1 == 0) {
                 self.state = .push;
             },
             .push => {
-                if (self.sprite_fetch) {
-                    fifo.addObjPixels(self.byte0, self.byte1, self.sprite_idx);
-                    self.sprite_fetch = false;
-                    fifo.paused = false;
+                if (fifo.addPixels(self.byte0, self.byte1))
                     self.state = .tile;
-                } else if (fifo.addPixels(self.byte0, self.byte1)) {
-                    self.state = .tile;
-                }
             },
         }
     }
@@ -468,20 +440,20 @@ const Fifo = struct {
     shifter_hi: u16 = 0,
     x: u8 = 0,
     discard_count: u3 = 0,
-    paused: bool = false,
 
     obj_shifter_lo: u8 = 0,
     obj_shifter_hi: u8 = 0,
     obj_prio_shifter: u8 = 0,
-    obj_idx_to_bit: [8]u8 = std.mem.zeroes([8]u8),
+    obj_bit: u8 = 0,
+    obj_entries: [8]OamEntry = std.mem.zeroes([8]OamEntry),
 
-    fn addObjPixels(self: *@This(), lo: u8, hi: u8, idx: u8) void {
+    fn addObjPixels(self: *@This(), lo: u8, hi: u8, entry: OamEntry) void {
         // if (self.obj_shifter_hi == 0 and self.obj_shifter_lo == 0) {
-        const entry = visible_sprites[idx];
         self.obj_shifter_lo = lo;
         self.obj_shifter_hi = hi;
         self.obj_prio_shifter = if (entry.attr.priority == 0) 0x00 else 0xFF;
-        @memset(&self.obj_idx_to_bit, idx);
+        self.obj_bit = 0xFF;
+        @memset(&self.obj_entries, entry);
         // }
 
         // for (0..8) |i| {
@@ -498,7 +470,7 @@ const Fifo = struct {
     }
 
     fn addPixels(self: *@This(), lo: u8, hi: u8) bool {
-        if (self.paused or self.size > 8) return false;
+        if (self.size > 8) return false;
 
         self.shifter_lo |= @as(u16, lo) << @intCast(8 - self.size);
         self.shifter_hi |= @as(u16, hi) << @intCast(8 - self.size);
@@ -510,8 +482,6 @@ const Fifo = struct {
     }
 
     fn push(self: *@This()) void {
-        if (self.paused) return;
-
         if (self.size > 0 and self.discard_count > 0) {
             self.shifter_lo <<= 1;
             self.shifter_hi <<= 1;
@@ -528,8 +498,23 @@ const Fifo = struct {
         self.shifter_lo <<= 1;
         self.size -= 1;
 
+        const obj_lo: u2 = @intFromBool(self.obj_shifter_lo & 0x80 != 0);
+        const obj_hi: u2 = @intFromBool(self.obj_shifter_hi & 0x80 != 0);
+        const obj_idx = obj_hi << 1 | obj_lo;
+        const prio: bool = self.obj_prio_shifter & 0x80 != 0;
+        self.obj_shifter_lo <<= 1;
+        self.obj_shifter_hi <<= 1;
+        self.obj_prio_shifter <<= 1;
+        self.obj_bit <<= 1;
+        std.mem.copyForwards(OamEntry, &self.obj_entries, self.obj_entries[1..]);
+
         const color = bg_colors[idx];
-        framebuffers[current_frame].putPixel(self.x, regs.ly, color);
+        const obj_color = obj_colors[self.obj_entries[0].attr.dmg_palette][obj_idx];
+        if (obj_idx == 0 or prio) {
+            framebuffers[current_frame].putPixel(self.x, regs.ly, color);
+        } else {
+            framebuffers[current_frame].putPixel(self.x, regs.ly, obj_color);
+        }
         self.x += 1;
     }
 
