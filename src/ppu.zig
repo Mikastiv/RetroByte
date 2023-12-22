@@ -10,9 +10,9 @@ const OamEntry = struct {
         cgb_palette: u3,
         cgb_bank: u1,
         dmg_palette: u1,
-        x_flip: u1,
-        y_flip: u1,
-        priority: u1,
+        x_flip: bool,
+        y_flip: bool,
+        priority: bool,
     },
 };
 
@@ -230,12 +230,24 @@ fn windowVisible() bool {
 
 fn processSprites() void {
     for (0..visible_sprites_count) |i| {
-        if (fifo.x == visible_sprites[i].x -% 8) {
-            const tile = visible_sprites[i].tile;
-            const tile_y = (regs.ly + 16) - visible_sprites[i].y;
+        const entry = visible_sprites[i];
+        if (fifo.x == entry.x -% 8) {
+            const y = (regs.ly + 16) - entry.y;
+            const tile = blk: {
+                if (regs.ctrl.objSize() == 16) {
+                    const top = if (entry.attr.y_flip) entry.tile | 0x01 else entry.tile & 0xFE;
+                    const bot = if (entry.attr.y_flip) entry.tile & 0xFE else entry.tile | 0x01;
+                    if (y >= 8)
+                        break :blk bot
+                    else
+                        break :blk top;
+                }
+                break :blk entry.tile;
+            };
+            const tile_y = if (entry.attr.y_flip) 7 - y % 8 else y % 8;
             const byte0 = vramRead(0x8000 + @as(u16, tile) * 16 + tile_y * 2);
             const byte1 = vramRead(0x8000 + @as(u16, tile) * 16 + tile_y * 2 + 1);
-            fifo.addObjPixels(byte0, byte1, visible_sprites[i]);
+            fifo.addObjPixels(byte0, byte1, entry);
             break;
         }
     }
@@ -434,6 +446,14 @@ const Fetcher = struct {
     }
 };
 
+fn bitFlip(bits: u8) u8 {
+    var x = bits;
+    x = (x & 0x55) << 1 | (x & 0xAA) >> 1;
+    x = (x & 0x33) << 2 | (x & 0xCC) >> 2;
+    x = (x & 0x0F) << 4 | (x & 0xF0) >> 4;
+    return x;
+}
+
 const Fifo = struct {
     size: u8 = 0,
     shifter_lo: u16 = 0,
@@ -444,29 +464,42 @@ const Fifo = struct {
     obj_shifter_lo: u8 = 0,
     obj_shifter_hi: u8 = 0,
     obj_prio_shifter: u8 = 0,
-    obj_bit: u8 = 0,
+    obj_exists: u8 = 0,
     obj_entries: [8]OamEntry = std.mem.zeroes([8]OamEntry),
 
     fn addObjPixels(self: *@This(), lo: u8, hi: u8, entry: OamEntry) void {
-        // if (self.obj_shifter_hi == 0 and self.obj_shifter_lo == 0) {
-        self.obj_shifter_lo = lo;
-        self.obj_shifter_hi = hi;
-        self.obj_prio_shifter = if (entry.attr.priority == 0) 0x00 else 0xFF;
-        self.obj_bit = 0xFF;
-        @memset(&self.obj_entries, entry);
-        // }
+        if (self.obj_shifter_hi == 0 and self.obj_shifter_lo == 0) {
+            if (entry.attr.x_flip) {
+                self.obj_shifter_lo = bitFlip(lo);
+                self.obj_shifter_hi = bitFlip(hi);
+            } else {
+                self.obj_shifter_lo = lo;
+                self.obj_shifter_hi = hi;
+            }
+            self.obj_prio_shifter = if (entry.attr.priority) 0xFF else 0x00;
+            self.obj_exists = 0xFF;
+            @memset(&self.obj_entries, entry);
+            return;
+        }
 
-        // for (0..8) |i| {
-        //     const bit: u3 = (7 - i);
-        //     const mask: u8 = 1 << bit;
-        //     const b_lo: u2 = @intFromBool(self.obj_shifter_lo & mask != 0);
-        //     const b_hi: u2 = @intFromBool(self.obj_shifter_hi & mask != 0);
-        //     const color = b_hi | b_lo;
+        for (0..8) |i| {
+            const bit: u3 = @intCast(7 - i);
+            const mask: u8 = @as(u8, 1) << bit;
 
-        //     if (color == 0) {
-        //         obj_shifter
-        //     }
-        // }
+            const shf_lo: u2 = @intFromBool(self.obj_shifter_lo & mask != 0);
+            const shf_hi: u2 = @intFromBool(self.obj_shifter_hi & mask != 0);
+            const curr_idx = shf_hi << 1 | shf_lo;
+
+            if (self.obj_exists & mask != 0 or curr_idx != 0) continue;
+
+            const bit_lo = lo & mask;
+            const bit_hi = hi & mask;
+
+            self.obj_shifter_lo |= bit_lo;
+            self.obj_shifter_hi |= bit_hi;
+            self.obj_exists |= mask;
+            self.obj_entries[i] = entry;
+        }
     }
 
     fn addPixels(self: *@This(), lo: u8, hi: u8) bool {
@@ -505,7 +538,7 @@ const Fifo = struct {
         self.obj_shifter_lo <<= 1;
         self.obj_shifter_hi <<= 1;
         self.obj_prio_shifter <<= 1;
-        self.obj_bit <<= 1;
+        self.obj_exists <<= 1;
         std.mem.copyForwards(OamEntry, &self.obj_entries, self.obj_entries[1..]);
 
         const color = bg_colors[idx];
