@@ -486,14 +486,15 @@ const Fifo = struct {
             const bit: u3 = @intCast(7 - i);
             const mask: u8 = @as(u8, 1) << bit;
 
-            const shf_lo: u2 = @intFromBool(self.obj_shifter_lo & mask != 0);
-            const shf_hi: u2 = @intFromBool(self.obj_shifter_hi & mask != 0);
-            const curr_idx = shf_hi << 1 | shf_lo;
+            if (self.obj_exists & mask != 0) continue;
 
-            if (self.obj_exists & mask != 0 or curr_idx != 0) continue;
-
-            const bit_lo = lo & mask;
-            const bit_hi = hi & mask;
+            const bit_lo, const bit_hi = blk: {
+                if (entry.attr.x_flip) {
+                    break :blk .{ bitFlip(lo) & mask, bitFlip(hi) & mask };
+                } else {
+                    break :blk .{ lo & mask, hi & mask };
+                }
+            };
 
             self.obj_shifter_lo |= bit_lo;
             self.obj_shifter_hi |= bit_hi;
@@ -541,11 +542,11 @@ const Fifo = struct {
         self.obj_exists <<= 1;
         std.mem.copyForwards(OamEntry, &self.obj_entries, self.obj_entries[1..]);
 
-        const color = bg_colors[idx];
-        const obj_color = obj_colors[self.obj_entries[0].attr.dmg_palette][obj_idx];
-        if (obj_idx == 0 or prio) {
+        if (obj_idx == 0 or (prio and idx > 0)) {
+            const color = bg_colors[idx];
             framebuffers[current_frame].putPixel(self.x, regs.ly, color);
         } else {
+            const obj_color = obj_colors[self.obj_entries[0].attr.dmg_palette][obj_idx];
             framebuffers[current_frame].putPixel(self.x, regs.ly, obj_color);
         }
         self.x += 1;
